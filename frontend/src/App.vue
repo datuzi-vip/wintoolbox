@@ -17,7 +17,6 @@ import { api } from './api/index.js'
 import { useAppState } from './composables/useAppState.js'
 import { useActions } from './composables/useActions.js'
 import OpLog from './components/OpLog.vue'
-import logoUrl from './assets/logo.svg'
 
 const OverviewView = defineAsyncComponent(() => import('./views/OverviewView.vue'))
 const AccountView = defineAsyncComponent(() => import('./views/AccountView.vue'))
@@ -245,7 +244,7 @@ async function onRefresh() {
   <el-container class="app-shell">
     <el-aside width="232px" class="app-aside">
       <div class="brand">
-        <img class="brand__logo" :src="logoUrl" width="40" height="40" alt="WinToolbox" />
+        <img class="brand__logo" src="/logo.svg" width="40" height="40" alt="WinToolbox" />
         <div class="brand__text">
           <div class="brand__title">WinToolbox</div>
           <div class="brand__sub">本地运维工具箱</div>
