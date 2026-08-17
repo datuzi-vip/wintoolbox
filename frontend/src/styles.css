@@ -1,0 +1,238 @@
+:root {
+  --wt-sidebar-bg: #15202b;
+  --wt-sidebar-bg-2: #1c2a38;
+  --wt-sidebar-active: #3b82f6;
+  --wt-sidebar-active-soft: rgba(59, 130, 246, 0.18);
+  --wt-sidebar-text: #c5d0dc;
+  --wt-sidebar-muted: #8494a7;
+  --wt-page-bg: #eef2f6;
+  --wt-surface: #ffffff;
+  --wt-border: #e2e8f0;
+  --wt-border-soft: #edf1f5;
+  --wt-text-primary: #1e293b;
+  --wt-text-regular: #475569;
+  --wt-text-secondary: #64748b;
+  --wt-text-placeholder: #94a3b8;
+  --wt-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --wt-shadow-md: 0 8px 24px rgba(15, 23, 42, 0.06);
+  --wt-radius: 12px;
+  --wt-radius-sm: 10px;
+  --wt-accent: #3b82f6;
+  --wt-status-bg: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  height: 100%;
+  font-family: 'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei UI', sans-serif;
+  background: var(--wt-page-bg);
+  color: var(--wt-text-primary);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* —— Page chrome —— */
+.page-title {
+  margin: 0 0 4px;
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--wt-text-primary);
+}
+
+.page-desc {
+  margin: 0 0 18px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--wt-text-secondary);
+}
+
+/* —— Cards —— */
+.wt-card {
+  margin-bottom: 16px;
+  border-radius: var(--wt-radius) !important;
+  border: 1px solid var(--wt-border-soft) !important;
+  box-shadow: var(--wt-shadow-sm);
+  background: var(--wt-surface);
+}
+
+.wt-card:last-child {
+  margin-bottom: 0;
+}
+
+.el-card {
+  border-radius: var(--wt-radius) !important;
+  border-color: var(--wt-border-soft) !important;
+  box-shadow: var(--wt-shadow-sm);
+}
+
+.el-card__header {
+  border-bottom-color: var(--wt-border-soft) !important;
+  font-weight: 600;
+  color: var(--wt-text-primary);
+  padding: 14px 18px !important;
+}
+
+.el-card__body {
+  padding: 16px 18px !important;
+}
+
+/* —— Status panel (shared across RDP / firewall / defender / update / etc.) —— */
+.wt-status-block {
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border-radius: var(--wt-radius-sm);
+  background: var(--wt-status-bg);
+  border: 1px solid var(--wt-border);
+}
+
+.wt-status-block:last-child {
+  margin-bottom: 0;
+}
+
+.wt-status-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--wt-text-primary);
+}
+
+.wt-status-label {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--wt-text-primary);
+}
+
+.wt-status-sub {
+  font-weight: 400;
+  font-size: 13px;
+  color: var(--wt-text-secondary);
+}
+
+.wt-detail {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--wt-text-secondary);
+  line-height: 1.6;
+  word-break: break-all;
+}
+
+.wt-detail:first-child {
+  margin-top: 0;
+}
+
+.wt-detail--err {
+  color: var(--el-color-danger);
+}
+
+.wt-hint {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--wt-text-secondary);
+  line-height: 1.5;
+}
+
+.wt-notes {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--wt-text-secondary);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  max-height: 220px;
+  overflow: auto;
+}
+
+/* —— Stat tiles (firewall profiles, etc.) —— */
+.wt-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.wt-stat-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--wt-radius-sm);
+  background: var(--wt-surface);
+  border: 1px solid var(--wt-border);
+}
+
+.wt-stat-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--wt-text-regular);
+}
+
+@media (max-width: 720px) {
+  .wt-stat-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* —— Actions / forms —— */
+.wt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.wt-actions--mt {
+  margin-top: 16px;
+}
+
+.wt-form-row {
+  max-width: 520px;
+}
+
+.wt-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.wt-chip {
+  cursor: pointer;
+}
+
+.wt-inline-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.wt-inline-status {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+}
+
+/* —— Descriptions (overview) —— */
+.wt-desc :deep(.el-descriptions__label) {
+  width: 96px;
+  white-space: nowrap;
+}
+
+.wt-desc :deep(.el-descriptions__content) {
+  word-break: break-all;
+}
+
+.wt-count {
+  font-size: 13px;
+  color: var(--wt-text-secondary);
+}

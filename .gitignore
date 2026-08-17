@@ -1,0 +1,31 @@
+# Binaries & build artifacts
+*.exe
+*.syso
+*.test
+*.out
+rsrc.syso
+WinToolbox.exe
+WinToolbox-v*-windows-amd64.exe
+
+# Go
+vendor/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/components.d.ts
+frontend/auto-imports.d.ts
+
+# IDE / editor
+.idea/
+.vscode/
+.cursor/
+*.iml
+
+# OS
+Thumbs.db
+Desktop.ini
+
+# 软著申请材料（本地生成，不入库）
+softcopyright/
+docs/软著/
