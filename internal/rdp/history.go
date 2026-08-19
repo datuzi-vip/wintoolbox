@@ -196,6 +196,81 @@ func ClearConnectionHistory() (string, error) {
 	return detail, nil
 }
 
+// ClearConnectionHistoryByKind removes only one kind of RDP history.
+// kind: mru | server | credential | file | cache
+func ClearConnectionHistoryByKind(kind string) (string, error) {
+	kind = strings.TrimSpace(kind)
+	if kind == "" {
+		return "", fmt.Errorf("记录类型不能为空")
+	}
+	switch kind {
+	case "mru", "server", "credential", "file", "cache":
+	default:
+		return "", fmt.Errorf("不支持的记录类型: %s", kind)
+	}
+
+	before, listErr := ListConnectionHistory()
+	if listErr != nil && len(before) == 0 {
+		return "", fmt.Errorf("无法枚举连接记录，未执行清理: %w", listErr)
+	}
+
+	var targets []HistoryEntry
+	for _, e := range before {
+		if e.Kind == kind {
+			targets = append(targets, e)
+		}
+	}
+	if len(targets) == 0 {
+		return fmt.Sprintf("未发现可清理的 RDP 记录类型：%s", kind), nil
+	}
+
+	var (
+		ok       int
+		failMsgs []string
+	)
+	for _, e := range targets {
+		if err := DeleteHistoryEntry(e.Kind, e.Host, e.Username, e.Detail, e.Sid); err == nil {
+			ok++
+		} else {
+			msg := strings.TrimSpace(err.Error())
+			if msg == "" {
+				msg = err.Error()
+			}
+			failMsgs = append(failMsgs, msg)
+		}
+	}
+
+	after, afterErr := ListConnectionHistory()
+	if afterErr != nil {
+		// Still surface attempted detail; verify is best-effort.
+		detail := fmt.Sprintf("已尝试清理：类型=%s · 目标 %d 条 · 成功 %d 条", kind, len(targets), ok)
+		return detail, fmt.Errorf("%s；清理后复查失败: %w", detail, afterErr)
+	}
+
+	var remaining int
+	for _, e := range after {
+		if e.Kind == kind {
+			remaining++
+		}
+	}
+
+	detail := fmt.Sprintf("已尝试清理：类型=%s · 目标 %d 条 · 成功 %d 条", kind, len(targets), ok)
+	if remaining > 0 {
+		if len(failMsgs) > 0 {
+			detail += fmt.Sprintf("；仍残留 %d 条（失败: %s）", remaining, strings.Join(failMsgs, "; "))
+		} else {
+			detail += fmt.Sprintf("；仍残留 %d 条（请检查权限或组策略）", remaining)
+		}
+		return detail, fmt.Errorf("%s", detail)
+	}
+
+	if len(failMsgs) > 0 {
+		detail += "；部分操作失败但复查已清空: " + strings.Join(failMsgs, "; ")
+		return detail, nil
+	}
+	return detail, nil
+}
+
 // DeleteHistoryEntry removes a single listed history item.
 // sid scopes mru/server deletes to one user hive (required for safe multi-user machines).
 func DeleteHistoryEntry(kind, host, username, detail, sid string) error {
@@ -263,9 +338,11 @@ func DeleteHistoryEntry(kind, host, username, detail, sid string) error {
 
 	left, _ := ListConnectionHistory()
 	for _, e := range left {
+		// For mru/server we scope deletion by SID, but still treat an empty SID from
+		// the enumerator as "unknown" to avoid false negatives.
 		if e.Kind == kind && strings.EqualFold(e.Host, host) &&
 			strings.EqualFold(e.Username, username) && e.Detail == detail &&
-			(sid == "" || strings.EqualFold(e.Sid, sid)) {
+			(sid == "" || e.Sid == "" || strings.EqualFold(e.Sid, sid)) {
 			return fmt.Errorf("已提交删除，但复查仍可见该记录")
 		}
 	}

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, defineAsyncComponent, onMounted, reactive, ref, watch } from 'vue'
+import {computed, defineAsyncComponent, onMounted, reactive, ref, watch} from 'vue'
 import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
 import {
   Monitor,
@@ -12,10 +12,10 @@ import {
   FirstAidKit,
   Download,
 } from '@element-plus/icons-vue'
-import { APP_VERSION as APP_VERSION_FALLBACK, MENUS } from './constants.js'
-import { api } from './api/index.js'
-import { useAppState } from './composables/useAppState.js'
-import { useActions } from './composables/useActions.js'
+import {APP_VERSION as APP_VERSION_FALLBACK, MENUS} from './constants.js'
+import {api} from './api/index.js'
+import {useAppState} from './composables/useAppState.js'
+import {useActions} from './composables/useActions.js'
 import OpLog from './components/OpLog.vue'
 
 const OverviewView = defineAsyncComponent(() => import('./views/OverviewView.vue'))
@@ -28,7 +28,7 @@ const PowerView = defineAsyncComponent(() => import('./views/PowerView.vue'))
 const UpdateView = defineAsyncComponent(() => import('./views/UpdateView.vue'))
 const SelfUpdateView = defineAsyncComponent(() => import('./views/SelfUpdateView.vue'))
 
-const ICONS = { Monitor, User, Connection, Lock, Clock, SwitchButton, Refresh, FirstAidKit, Download }
+const ICONS = {Monitor, User, Connection, Lock, Clock, SwitchButton, Refresh, FirstAidKit, Download}
 
 const active = ref('overview')
 const busy = ref(false)
@@ -50,7 +50,7 @@ const appUpdate = reactive({
 const appUpdateChecking = ref(false)
 
 function appendLog(msg) {
-  const t = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+  const t = new Date().toLocaleTimeString('zh-CN', {hour12: false})
   logs.value.push(`[${t}] ${msg}`)
 }
 
@@ -83,7 +83,7 @@ const {
   ensureFirewallRules,
   ensureTimeZones,
   ensureRdpHistory,
-} = useAppState({ appendLog })
+} = useAppState({appendLog})
 
 const actions = useActions({
   busy,
@@ -109,6 +109,10 @@ const status = computed(() => ({
   firewallPublic: state.firewallPublic,
   firewallAllOn: state.firewallAllOn,
   firewallAllOff: state.firewallAllOff,
+  pingBlocked: state.pingBlocked,
+  pingIPv4Blocked: state.pingIPv4Blocked,
+  pingIPv6Blocked: state.pingIPv6Blocked,
+  pingState: state.pingState,
   timeText: state.timeText,
 }))
 
@@ -173,9 +177,9 @@ async function onDownloadAppUpdate() {
 async function onApplyAppUpdate() {
   try {
     await ElMessageBox.confirm(
-      `确认安装 v${appUpdate.latestVersion || ''} 并重启 WinToolbox？`,
-      '安装更新',
-      { type: 'warning', confirmButtonText: '安装并重启', cancelButtonText: '取消' },
+        `确认安装 v${appUpdate.latestVersion || ''} 并重启 WinToolbox？`,
+        '安装更新',
+        {type: 'warning', confirmButtonText: '安装并重启', cancelButtonText: '取消'},
     )
   } catch {
     return
@@ -218,7 +222,7 @@ onMounted(async () => {
     /* keep fallback from constants.js */
   }
   try {
-    await refresh(false, false)
+    await refresh(false, false, true)
   } catch {
     /* refresh already reported */
   }
@@ -228,7 +232,8 @@ onMounted(async () => {
 
 async function onRefresh() {
   try {
-    await refresh(true, true)
+    const queueDetail = active.value === 'overview'
+    await refresh(true, true, queueDetail)
     if (active.value === 'firewall') await ensureFirewallRules()
     if (active.value === 'time') await ensureTimeZones()
     if (active.value === 'rdp') await ensureRdpHistory()
@@ -241,139 +246,150 @@ async function onRefresh() {
 
 <template>
   <el-config-provider :locale="zhCn">
-  <el-container class="app-shell">
-    <el-aside width="232px" class="app-aside">
-      <div class="brand">
-        <img class="brand__logo" src="/logo.svg" width="40" height="40" alt="WinToolbox" />
-        <div class="brand__text">
-          <div class="brand__title">WinToolbox</div>
-          <div class="brand__sub">本地运维工具箱</div>
+    <el-container class="app-shell">
+      <el-aside width="232px" class="app-aside">
+        <div class="brand">
+          <img class="brand__logo" src="/logo.svg" width="40" height="40" alt="WinToolbox"/>
+          <div class="brand__text">
+            <div class="brand__title">WinToolbox</div>
+            <div class="brand__sub">本地运维工具箱</div>
+          </div>
         </div>
-      </div>
-      <div class="brand__meta">
-        <span class="brand__ver">{{ APP_VERSION }}</span>
-      </div>
-
-      <el-menu
-        :default-active="active"
-        class="side-menu"
-        background-color="transparent"
-        text-color="#c5d0dc"
-        active-text-color="#ffffff"
-        @select="(k) => (active = k)"
-      >
-        <el-menu-item v-for="m in MENUS" :key="m.key" :index="m.key">
-          <el-icon><component :is="ICONS[m.icon]" /></el-icon>
-          <span>{{ m.title }}</span>
-        </el-menu-item>
-      </el-menu>
-
-      <div class="aside-foot">
-        <div>Copyright © WinToolbox</div>
-      </div>
-    </el-aside>
-
-    <el-container class="app-main-wrap">
-      <el-header class="app-header" height="60px">
-        <div class="header-left">
-          <div class="header-title">{{ activeMenu?.title }}</div>
-          <div class="header-desc">{{ activeMenu?.desc }}</div>
+        <div class="brand__meta">
+          <span class="brand__ver">{{ APP_VERSION }}</span>
         </div>
-        <el-button type="primary" round :loading="loading" @click="onRefresh">刷新</el-button>
-      </el-header>
 
-      <el-main class="app-main" v-loading="loading">
-        <OverviewView
-          v-if="active === 'overview'"
-          :overview="state.overview"
-          :detail-loading="overviewDetailLoading"
-        />
-        <AccountView
-          v-else-if="active === 'account'"
-          :accounts="state.accounts"
-          :form="form"
-          :busy="busy"
-          :lockout-disabled="state.lockoutDisabled"
-          :lockout-unknown="state.lockoutUnknown"
-          :lockout-detail="state.lockoutDetail"
-          @change-pass="actions.onAccPass"
-          @set-enabled="actions.onAccEnabled"
-          @set-admin="actions.onAccAdmin"
-          @disable-lockout="actions.onDisableLockout"
-          @enable-lockout="actions.onEnableLockout"
-        />
-        <RdpView
-          v-else-if="active === 'rdp'"
-          :status="status"
-          :form="form"
-          :busy="busy"
-          :history="rdpHistory"
-          :history-loading="rdpHistoryLoading"
-          @save-port="actions.onRdpPort"
-          @toggle="actions.onRdpToggle"
-          @clear-history="actions.onRdpClearHistory"
-          @delete-history="actions.onRdpDeleteHistory"
-          @refresh-history="ensureRdpHistory"
-        />
-        <FirewallView
-          v-else-if="active === 'firewall'"
-          :status="status"
-          :rules="firewallRules"
-          :form="form"
-          :busy="busy"
-          @allow="actions.onFwAllow"
-          @remove="actions.onFwRemove"
-          @remove-row="actions.onFwRemovePort"
-          @enable-all="actions.onFwEnableAll"
-          @disable-all="actions.onFwDisableAll"
-        />
-        <DefenderView
-          v-else-if="active === 'defender'"
-          :status="status"
-          :busy="busy"
-          @disable="actions.onDisableDefender"
-          @enable="actions.onEnableDefender"
-        />
-        <TimeView
-          v-else-if="active === 'time'"
-          :status="status"
-          :zones="timeZones"
-          :form="form"
-          :busy="busy"
-          @apply-tz="actions.onApplyTZ"
-          @save-ntp="actions.onSaveNTP"
-          @sync="actions.onSyncNTP"
-        />
-        <PowerView
-          v-else-if="active === 'power'"
-          :form="form"
-          :busy="busy"
-          @lock="actions.onLock"
-          @restart="actions.onRestart"
-          @shutdown="actions.onShutdown"
-          @abort="actions.onAbortPower"
-        />
-        <UpdateView
-          v-else-if="active === 'update'"
-          :status="status"
-          :busy="busy"
-          @disable="actions.onDisableUpdate"
-          @enable="actions.onEnableUpdate"
-        />
-        <SelfUpdateView
-          v-else-if="active === 'selfupdate'"
-          :info="appUpdate"
-          :busy="busy"
-          :checking="appUpdateChecking"
-          @check="() => onCheckAppUpdate(true)"
-          @download="onDownloadAppUpdate"
-          @apply="onApplyAppUpdate"
-        />
-      </el-main>
+        <el-menu
+            :default-active="active"
+            class="side-menu"
+            background-color="transparent"
+            text-color="#c5d0dc"
+            active-text-color="#ffffff"
+            @select="(k) => (active = k)"
+        >
+          <el-menu-item v-for="m in MENUS" :key="m.key" :index="m.key">
+            <el-icon>
+              <component :is="ICONS[m.icon]"/>
+            </el-icon>
+            <span>{{ m.title }}</span>
+          </el-menu-item>
+        </el-menu>
 
-      <OpLog :lines="logs" @clear="logs = []" />
+        <div class="aside-foot">
+          <div>Copyright © WinToolbox</div>
+        </div>
+      </el-aside>
+
+      <el-container class="app-main-wrap">
+        <el-header class="app-header" height="60px">
+          <div class="header-left">
+            <div class="header-title">{{ activeMenu?.title }}</div>
+            <div class="header-desc">{{ activeMenu?.desc }}</div>
+          </div>
+          <el-button type="primary" round :loading="loading" @click="onRefresh">刷新</el-button>
+        </el-header>
+
+        <el-main class="app-main" v-loading="loading">
+          <OverviewView
+              v-if="active === 'overview'"
+              :overview="state.overview"
+              :detail-loading="overviewDetailLoading"
+          />
+          <AccountView
+              v-else-if="active === 'account'"
+              :accounts="state.accounts"
+              :form="form"
+              :busy="busy"
+              :lockout-disabled="state.lockoutDisabled"
+              :lockout-unknown="state.lockoutUnknown"
+              :lockout-detail="state.lockoutDetail"
+              :lockout-threshold="state.lockoutThreshold"
+              :lockout-duration="state.lockoutDuration"
+              :lockout-window="state.lockoutWindow"
+              @change-pass="actions.onAccPass"
+              @set-enabled="actions.onAccEnabled"
+              @set-admin="actions.onAccAdmin"
+              @disable-lockout="actions.onDisableLockout"
+              @enable-lockout="actions.onEnableLockout"
+              @set-lockout-policy="actions.onSetLockoutPolicy"
+          />
+          <RdpView
+              v-else-if="active === 'rdp'"
+              :status="status"
+              :form="form"
+              :busy="busy"
+              :history="rdpHistory"
+              :history-loading="rdpHistoryLoading"
+              @save-port="actions.onRdpPort"
+              @toggle="actions.onRdpToggle"
+              @clear-history="actions.onRdpClearHistory"
+              @clear-history-kind="actions.onRdpClearHistoryByKind"
+              @delete-history="actions.onRdpDeleteHistory"
+              @refresh-history="ensureRdpHistory"
+          />
+          <FirewallView
+              v-else-if="active === 'firewall'"
+              :status="status"
+              :rules="firewallRules"
+              :form="form"
+              :busy="busy"
+              @allow="actions.onFwAllow"
+              @remove="actions.onFwRemove"
+              @remove-row="actions.onFwRemovePort"
+              @enable-all="actions.onFwEnableAll"
+              @disable-all="actions.onFwDisableAll"
+              @disable-ping="actions.onFwDisablePing"
+              @enable-ping="actions.onFwEnablePing"
+              @clear-allow-all="actions.onFwClearAllAllowRules"
+          />
+          <DefenderView
+              v-else-if="active === 'defender'"
+              :status="status"
+              :busy="busy"
+              @disable="actions.onDisableDefender"
+              @enable="actions.onEnableDefender"
+          />
+          <TimeView
+              v-else-if="active === 'time'"
+              :status="status"
+              :zones="timeZones"
+              :form="form"
+              :busy="busy"
+              @apply-tz="actions.onApplyTZ"
+              @save-ntp="actions.onSaveNTP"
+              @sync="actions.onSyncNTP"
+               @test-ntp="actions.onTestNTP"
+          />
+          <PowerView
+              v-else-if="active === 'power'"
+              :form="form"
+              :busy="busy"
+              @lock="actions.onLock"
+              @restart="actions.onRestart"
+              @shutdown="actions.onShutdown"
+              @abort="actions.onAbortPower"
+          />
+          <UpdateView
+              v-else-if="active === 'update'"
+              :status="status"
+              :busy="busy"
+              @disable="actions.onDisableUpdate"
+              @enable="actions.onEnableUpdate"
+          />
+          <SelfUpdateView
+              v-else-if="active === 'selfupdate'"
+              :info="appUpdate"
+              :busy="busy"
+              :checking="appUpdateChecking"
+              @check="() => onCheckAppUpdate(true)"
+              @download="onDownloadAppUpdate"
+              @apply="onApplyAppUpdate"
+          />
+        </el-main>
+
+        <OpLog :lines="logs" @clear="logs = []"/>
+      </el-container>
     </el-container>
-  </el-container>
   </el-config-provider>
 </template>
 
@@ -384,9 +400,8 @@ async function onRefresh() {
 }
 
 .app-aside {
-  background:
-    radial-gradient(120% 80% at 0% 0%, rgba(59, 130, 246, 0.16), transparent 55%),
-    linear-gradient(180deg, var(--wt-sidebar-bg-2), var(--wt-sidebar-bg));
+  background: radial-gradient(120% 80% at 0% 0%, rgba(59, 130, 246, 0.16), transparent 55%),
+  linear-gradient(180deg, var(--wt-sidebar-bg-2), var(--wt-sidebar-bg));
   display: flex;
   flex-direction: column;
   border-right: 1px solid rgba(255, 255, 255, 0.06);
@@ -468,8 +483,7 @@ async function onRefresh() {
 }
 
 .app-main-wrap {
-  background:
-    linear-gradient(180deg, #f7f9fc 0%, var(--wt-page-bg) 120px);
+  background: linear-gradient(180deg, #f7f9fc 0%, var(--wt-page-bg) 120px);
   min-width: 0;
 }
 

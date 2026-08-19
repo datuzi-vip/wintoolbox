@@ -4,22 +4,22 @@ import "wintoolbox/internal/wintime"
 
 const (
 	AppName    = "WinToolbox" // synced from version.json via scripts/sync-version.ps1
-	AppVersion = "v1.0"       // synced from version.json via scripts/sync-version.ps1
+	AppVersion = "v1.1"       // synced from version.json via scripts/sync-version.ps1
 )
 
 // AppInfo is version metadata for the UI.
 type AppInfo struct {
 	Name    string `json:"name"`    // WinToolbox
-	Version string `json:"version"` // v1.0
+	Version string `json:"version"` // v1.1
 }
 
 // Status is a full app snapshot for UI.
 type Status struct {
-	Overview        OverviewView         `json:"overview"`
-	Accounts        []AccountView        `json:"accounts"`
-	RdpEnabled      bool                 `json:"rdpEnabled"`
-	RdpPort         uint32               `json:"rdpPort"`
-	RdpAvailable    bool                 `json:"rdpAvailable"`
+	Overview         OverviewView         `json:"overview"`
+	Accounts         []AccountView        `json:"accounts"`
+	RdpEnabled       bool                 `json:"rdpEnabled"`
+	RdpPort          uint32               `json:"rdpPort"`
+	RdpAvailable     bool                 `json:"rdpAvailable"`
 	UpdateDisabled   bool                 `json:"updateDisabled"`
 	UpdateDetail     string               `json:"updateDetail"`
 	FirewallSummary  string               `json:"firewallSummary"`
@@ -28,16 +28,23 @@ type Status struct {
 	FirewallPublic   string               `json:"firewallPublic"`
 	FirewallAllOn    bool                 `json:"firewallAllOn"`
 	FirewallAllOff   bool                 `json:"firewallAllOff"`
+	PingBlocked      bool                 `json:"pingBlocked"`
+	PingIPv4Blocked  bool                 `json:"pingIPv4Blocked"`
+	PingIPv6Blocked  bool                 `json:"pingIPv6Blocked"`
+	PingState        string               `json:"pingState"`
 	DefenderDisabled bool                 `json:"defenderDisabled"`
 	DefenderDetail   string               `json:"defenderDetail"`
-	TimeText        string               `json:"timeText"`
-	TimeZone        string               `json:"timeZone"`
-	TimeZones       []wintime.ZoneOption `json:"timeZones"`
-	NTPServer       string               `json:"ntpServer"`
-	Warnings        []string             `json:"warnings,omitempty"`
-	LockoutDisabled bool                 `json:"lockoutDisabled"`
-	LockoutUnknown  bool                 `json:"lockoutUnknown"`
-	LockoutDetail   string               `json:"lockoutDetail"`
+	TimeText         string               `json:"timeText"`
+	TimeZone         string               `json:"timeZone"`
+	TimeZones        []wintime.ZoneOption `json:"timeZones"`
+	NTPServer        string               `json:"ntpServer"`
+	Warnings         []string             `json:"warnings,omitempty"`
+	LockoutDisabled  bool                 `json:"lockoutDisabled"`
+	LockoutUnknown   bool                 `json:"lockoutUnknown"`
+	LockoutDetail    string               `json:"lockoutDetail"`
+	LockoutThreshold int                  `json:"lockoutThreshold"`
+	LockoutDuration  int                  `json:"lockoutDuration"`
+	LockoutWindow    int                  `json:"lockoutWindow"`
 }
 
 // OverviewView is display-ready overview data.

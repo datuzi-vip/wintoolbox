@@ -1,5 +1,5 @@
 export const APP_NAME = 'WinToolbox' // synced from version.json
-export const APP_VERSION = 'v1.0' // synced from version.json
+export const APP_VERSION = 'v1.1' // synced from version.json
 
 export const MENUS = [
   { key: 'overview', title: '本机概览', icon: 'Monitor', desc: '系统与硬件' },
@@ -21,3 +21,6 @@ export const NTP_PRESETS = [
   { id: 'ntp.ntsc.ac.cn', label: '国家授时' },
   { id: 'time.nist.gov', label: 'NIST' },
 ]
+
+export const FORM_LABEL_WIDTH = '96px'
+export const FORM_LABEL_WIDTH_WIDE = '136px'

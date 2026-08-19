@@ -31,8 +31,21 @@ try {
 }
 
 Write-Host '==> Embedding manifest + icon' -ForegroundColor Cyan
-go run github.com/akavel/rsrc@latest -manifest app.manifest -ico assets/app.ico -o rsrc.syso -arch amd64
-Assert-LastExitCode 'rsrc'
+$genScript = "$PSScriptRoot\\gen-rsrc-winres.go"
+$needRsrc = -not (Test-Path rsrc.syso)
+if (-not $needRsrc) {
+  $sysoTime = (Get-Item rsrc.syso).LastWriteTimeUtc
+  $icoTime = (Get-Item assets\\app.ico).LastWriteTimeUtc
+  $manifestTime = (Get-Item app.manifest).LastWriteTimeUtc
+  $genTime = (Get-Item $genScript).LastWriteTimeUtc
+  $needRsrc = $icoTime -gt $sysoTime -or $manifestTime -gt $sysoTime -or $genTime -gt $sysoTime
+}
+if ($needRsrc) {
+  go run ./scripts/gen-rsrc-winres.go -manifest app.manifest -ico assets\\app.ico -o rsrc.syso -arch amd64
+  Assert-LastExitCode 'gen-rsrc-winres'
+} else {
+  Write-Host '==> Skip rsrc: rsrc.syso up-to-date' -ForegroundColor DarkGray
+}
 
 Write-Host '==> Building WinToolbox.exe (Wails)' -ForegroundColor Cyan
 # Wails requires desktop,production tags for a real window (plain go build shows a stub error dialog).

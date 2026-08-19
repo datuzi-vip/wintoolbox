@@ -16,8 +16,8 @@ const (
 
 	// DefaultEnable* is the one-click "enable lockout" policy.
 	DefaultEnableThreshold = 10
-	DefaultEnableDuration  = 10 // minutes
-	DefaultEnableWindow    = 10 // minutes
+	DefaultEnableDuration  = 30 // minutes
+	DefaultEnableWindow    = 30 // minutes
 
 	timeqForever = uint32(0xFFFFFFFF)
 )
@@ -456,6 +456,102 @@ func EnableLockout() error {
 		_ = pol
 		return nil
 	}
+	if lastErr != nil {
+		return lastErr
+	}
+	return fmt.Errorf("开启锁定策略失败：多次重试后仍未生效")
+}
+
+// SetLockoutPolicy sets a custom local lockout policy.
+// threshold=0 disables lockout (and also unlocks currently locked local users).
+// When threshold>0, durationMin/windowMin must be >=1.
+func SetLockoutPolicy(threshold, durationMin, windowMin uint32) error {
+	if threshold == 0 {
+		return DisableLockout()
+	}
+	if durationMin < 1 || windowMin < 1 {
+		return fmt.Errorf("自定义锁定策略无效：阈值>0 时 锁定时间/复位窗口 均需 >= 1 分钟")
+	}
+	// Windows policy constraint:
+	// lockout duration (LockoutDuration) must be >= reset/observation window (LockoutObservationWindow)
+	// when lockout threshold > 0.
+	if durationMin < windowMin {
+		return fmt.Errorf("自定义锁定策略无效：复位窗口（%d 分钟）不能大于锁定时间（%d 分钟）", windowMin, durationMin)
+	}
+
+	var lastErr error
+	thStr := strconv.Itoa(int(threshold))
+	durStr := strconv.Itoa(int(durationMin))
+	winStr := strconv.Itoa(int(windowMin))
+	for attempt := 0; attempt < 3; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(attempt) * 400 * time.Millisecond)
+		}
+		apiErr := setLockoutPolicyAPI(threshold, durationMin, windowMin)
+		// Always run `net accounts` as a best-effort fallback.
+		// Some Windows builds / locales can make NetUserModalsSet partially apply fields.
+		var errs []string
+		if apiErr != nil {
+			errs = append(errs, "API: "+apiErr.Error())
+		}
+		for _, c := range [][]string{
+			{"net", "accounts", "/lockoutthreshold:" + thStr},
+			{"net", "accounts", "/lockoutduration:" + durStr},
+			{"net", "accounts", "/lockoutwindow:" + winStr},
+		} {
+			out, err := syscmd.Run(c[0], c[1:]...)
+			if err != nil {
+				msg := strings.TrimSpace(out)
+				if msg == "" {
+					msg = err.Error()
+				}
+				errs = append(errs, msg)
+			}
+		}
+		if len(errs) > 0 {
+			lastErr = fmt.Errorf("开启锁定策略失败: %s", strings.Join(errs, "; "))
+		}
+
+		// Best-effort verify with polling.
+		var last LockoutPolicy
+		var verifyErr error
+		for i := 0; i < 12; i++ {
+			if i > 0 {
+				time.Sleep(250 * time.Millisecond)
+			}
+			pol, err := GetLockoutPolicy()
+			last = pol
+			if err != nil {
+				verifyErr = fmt.Errorf("复查锁定策略失败: %w", err)
+				continue
+			}
+			if pol.Unknown {
+				return fmt.Errorf("已提交开启锁定，但无法解析复查结果（系统语言可能不受支持）")
+			}
+			if pol.Disabled || pol.Threshold != int(threshold) {
+				verifyErr = fmt.Errorf("已提交开启锁定，但复查阈值仍为 %d（期望 %d，可能被组策略覆盖）", pol.Threshold, threshold)
+				continue
+			}
+			dur := parseMinutesField(pol.Duration)
+			win := parseMinutesField(pol.Window)
+			if dur != int(durationMin) || win != int(windowMin) {
+				verifyErr = fmt.Errorf("阈值已为 %d，但锁定时间/复位窗口未达到 %d/%d 分钟（当前 %s / %s，可能被组策略覆盖）",
+					pol.Threshold, durationMin, windowMin, dashStr(pol.Duration), dashStr(pol.Window))
+				continue
+			}
+			_ = last
+			return nil
+		}
+
+		if verifyErr != nil {
+			if lastErr != nil {
+				lastErr = fmt.Errorf("%v; %v", lastErr, verifyErr)
+			} else {
+				lastErr = verifyErr
+			}
+		}
+	}
+
 	if lastErr != nil {
 		return lastErr
 	}

@@ -5,21 +5,21 @@ Windows 本地运维工具箱：Go + [Wails v2](https://wails.io) + Vue3 + Eleme
 
 ## 功能
 
-| 模块 | 能力 |
-|------|------|
+| 模块     | 能力                                                                                                  |
+|----------|-------------------------------------------------------------------------------------------------------|
 | 本机概览 | 主机名、系统+Build、激活、分辨率、IP、固定磁盘；硬件（厂商/型号/主板/BIOS/CPU/内存/内存条/硬盘/显卡） |
-| 本地账户 | 改密码、启用/禁用、管理员权限；一键开启/关闭账户锁定 |
-| 远程桌面 | 开关、改端口并同步防火墙；查看/单条或全部清理 mstsc 连接记录 |
-| 防火墙 | 一键开/关全部配置文件；放行/删除 TCP 端口，查看已创建规则 |
-| 防病毒 | 一键关闭/恢复 Windows Defender 实时防护 |
-| 时间同步 | 国际格式时区列表、常用 NTP 预设、立即同步 |
-| 电源 | 锁定、延时重启/关机（含 0 秒立即执行）、取消关机/重启 |
-| 系统更新 | 一键关闭/恢复 Windows Update；状态含策略与核心服务明细 |
-| 软件更新 | 检测 GitHub Release，SHA256 校验后下载，确认后安装并重启 |
+| 本地账户 | 改密码、启用/禁用、管理员权限；一键开启/关闭账户锁定                                                  |
+| 远程桌面 | 开关、改端口并同步防火墙；查看/单条或全部清理 mstsc 连接记录                                          |
+| 防火墙   | 一键开/关全部配置文件；一键禁 ping / 恢复 ping；放行/删除 TCP 端口，查看已创建规则                    |
+| 防病毒   | 一键关闭/恢复 Windows Defender 实时防护                                                               |
+| 时间同步 | 国际格式时区列表、常用 NTP 预设、立即同步                                                             |
+| 电源     | 锁定、延时重启/关机（含 0 秒立即执行）、取消关机/重启                                                 |
+| 系统更新 | 一键关闭/恢复 Windows Update；状态含策略与核心服务明细                                                |
+| 软件更新 | 检测 GitHub Release，SHA256 校验后下载，确认后安装并重启                                              |
 
 ## 支持系统
 
-Windows 10 / 11，Windows Server 2016 / 2019 / 2022 / 2025  
+Windows 10 / 11，Windows Server 2016 / 2019 / 2022 / 2025
 
 需管理员权限。界面基于 WebView2；若未安装会自动联网下载并显示安装进度（防重复下载）。
 
@@ -112,16 +112,16 @@ wintoolbox/
 
 ### 前端 views 对照
 
-| 侧栏 | 视图 | 后端包 |
-|------|------|--------|
-| 本机概览 | OverviewView | sysinfo |
-| 本地账户 | AccountView | account |
-| 远程桌面 | RdpView | rdp |
-| 防火墙 | FirewallView | firewall |
-| 防病毒 | DefenderView | defender |
-| 时间同步 | TimeView | wintime |
-| 电源 | PowerView | power |
-| 系统更新 | UpdateView | update |
+| 侧栏     | 视图           | 后端包     |
+|----------|----------------|------------|
+| 本机概览 | OverviewView   | sysinfo    |
+| 本地账户 | AccountView    | account    |
+| 远程桌面 | RdpView        | rdp        |
+| 防火墙   | FirewallView   | firewall   |
+| 防病毒   | DefenderView   | defender   |
+| 时间同步 | TimeView       | wintime    |
+| 电源     | PowerView      | power      |
+| 系统更新 | UpdateView     | update     |
 | 软件更新 | SelfUpdateView | selfupdate |
 
 ### 交互约定

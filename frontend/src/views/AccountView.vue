@@ -1,5 +1,6 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { FORM_LABEL_WIDTH, FORM_LABEL_WIDTH_WIDE } from '../constants.js'
 
 const props = defineProps({
   accounts: { type: Array, default: () => [] },
@@ -8,9 +9,12 @@ const props = defineProps({
   lockoutDisabled: { type: Boolean, default: false },
   lockoutUnknown: { type: Boolean, default: false },
   lockoutDetail: { type: String, default: '' },
+  lockoutThreshold: { type: Number, default: 10 },
+  lockoutDuration: { type: Number, default: 30 },
+  lockoutWindow: { type: Number, default: 30 },
 })
 
-defineEmits(['change-pass', 'set-enabled', 'set-admin', 'disable-lockout', 'enable-lockout'])
+defineEmits(['change-pass', 'set-enabled', 'set-admin', 'disable-lockout', 'enable-lockout', 'set-lockout-policy'])
 
 const selected = computed(() => props.accounts.find((a) => a.name === props.form.accUser))
 
@@ -31,6 +35,36 @@ const lockoutTagType = computed(() => {
 const lockoutTagText = computed(() => {
   if (props.lockoutUnknown) return '未知'
   return props.lockoutDisabled ? '已关闭' : '已启用'
+})
+
+// Default to current system policy; if current values are unavailable,
+// fall back to 10 / 30 / 30.
+const customThreshold = ref(10)
+const customDurationMin = ref(30)
+const customWindowMin = ref(30)
+
+watch(
+  () => [props.lockoutThreshold, props.lockoutDuration, props.lockoutWindow],
+  ([threshold, duration, window]) => {
+    customThreshold.value = Number.isFinite(threshold) ? threshold : 10
+    customDurationMin.value = Number.isFinite(duration) && duration > 0 ? duration : 30
+    customWindowMin.value = Number.isFinite(window) && window > 0 ? window : 30
+  },
+  { immediate: true },
+)
+
+const canApplyCustomLockout = computed(() => {
+  if (props.busy) return false
+  if (!Number.isFinite(customThreshold.value)) return false
+  if (customThreshold.value < 0) return false
+  if (customThreshold.value === 0) return true // disable & unlock
+  // Windows policy constraint: lockout duration must be >= reset counter after.
+  // UI "复位窗口" maps to reset/observation window.
+  return (
+    customDurationMin.value >= 1 &&
+    customWindowMin.value >= 1 &&
+    customDurationMin.value >= customWindowMin.value
+  )
 })
 </script>
 
@@ -63,13 +97,56 @@ const lockoutTagText = computed(() => {
           一键关闭锁定
         </el-button>
       </div>
+
+      <div style="margin-top: 14px">
+        <el-form :label-width="FORM_LABEL_WIDTH_WIDE" class="wt-form-row">
+          <el-form-item label="自定义阈值（次）">
+            <el-input-number
+              v-model="customThreshold"
+              :min="0"
+              :max="9999"
+              controls-position="right"
+            />
+          </el-form-item>
+          <el-form-item label="锁定时间（分钟）">
+            <el-input-number
+              v-model="customDurationMin"
+              :min="1"
+              :max="9999"
+              controls-position="right"
+              :disabled="customThreshold === 0"
+            />
+          </el-form-item>
+          <el-form-item label="复位窗口（分钟）">
+            <el-input-number
+              v-model="customWindowMin"
+              :min="1"
+              :max="9999"
+              controls-position="right"
+              :disabled="customThreshold === 0"
+            />
+          </el-form-item>
+          <el-form-item>
+            <div class="wt-actions">
+              <el-button
+                type="primary"
+                :disabled="!canApplyCustomLockout"
+                @click="$emit('set-lockout-policy', customThreshold, customDurationMin, customWindowMin)"
+              >
+                应用自定义策略
+              </el-button>
+            </div>
+          </el-form-item>
+        </el-form>
+      </div>
+
       <p class="wt-hint">
-        开启：阈值=10、锁定 10 分钟、复位窗口 10 分钟。关闭：阈值=0 并解锁已锁定本地账户。域策略可能被组策略覆盖。
+        默认优先回填当前系统策略；若当前值不可用，则使用 10 / 30 / 30。开启：阈值=10、锁定 30 分钟、复位窗口 30 分钟。关闭：阈值=0 并解锁已锁定本地账户。域策略可能被组策略覆盖。
       </p>
     </el-card>
 
     <el-card shadow="never" header="账户操作" class="wt-card">
-      <el-form label-width="88px" class="wt-form-row">
+      <el-form :label-width="FORM_LABEL_WIDTH" class="wt-form-row">
         <el-form-item label="用户">
           <el-select v-model="form.accUser" placeholder="选择用户" style="width: 100%">
             <el-option

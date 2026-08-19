@@ -17,6 +17,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"wintoolbox/internal/win/syscmd"
 )
 
 const (
@@ -131,6 +133,10 @@ func Check(current string) (Info, error) {
 			info.Downloaded = true
 			info.DownloadPath = dest
 			info.Verified = verified
+			// If the asset was previously downloaded, it might still have
+			// Zone.Identifier (MOTW). Best-effort unblock to reduce SmartScreen
+			// false positives when the user clicks "Install".
+			_ = syscmd.UnblockFile(dest)
 		}
 	}
 
@@ -163,6 +169,7 @@ func Download(current string) (Info, error) {
 		info.Downloaded = true
 		info.DownloadPath = dest
 		info.Verified = verified
+		_ = syscmd.UnblockFile(dest)
 		mu.Lock()
 		cached = info
 		mu.Unlock()
@@ -230,6 +237,9 @@ func Download(current string) (Info, error) {
 		_ = os.Remove(tmp)
 		return info, fmt.Errorf("保存更新包失败: %w", err)
 	}
+	// Best-effort: remove Zone.Identifier ADS so Windows/Defender/SmartScreen
+	// is less likely to block executing the downloaded update.
+	_ = syscmd.UnblockFile(dest)
 
 	info.Downloaded = true
 	info.DownloadPath = dest
@@ -273,6 +283,7 @@ $source = %s
 $procId = %d
 while (Get-Process -Id $procId -ErrorAction SilentlyContinue) { Start-Sleep -Seconds 1 }
 Copy-Item -LiteralPath $source -Destination $target -Force
+Unblock-File -LiteralPath $target -ErrorAction SilentlyContinue
 Start-Process -FilePath $target
 Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
 `, psSingleQuote(exe), psSingleQuote(info.DownloadPath), pid)

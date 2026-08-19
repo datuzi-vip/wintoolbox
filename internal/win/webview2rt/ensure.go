@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"syscall"
 	"time"
+
+	"wintoolbox/internal/win/syscmd"
 )
 
 // Ensure makes sure WebView2 Evergreen Runtime is installed.
@@ -34,6 +36,9 @@ func downloadAndInstall() error {
 	if err := downloadBootstrapper(dest, prog.SetProgress); err != nil {
 		return fmt.Errorf("下载 WebView2 失败: %w", err)
 	}
+	// Best-effort: remove Zone.Identifier ADS so the silent installer is less
+	// likely to be blocked by SmartScreen/Defender.
+	_ = syscmd.UnblockFile(dest)
 
 	prog.SetStatus("正在校验安装包数字签名…")
 	if err := verifyMicrosoftSigned(dest); err != nil {

@@ -88,6 +88,13 @@ func (a *App) EnableAccountLockout() error {
 	return account.EnableLockout()
 }
 
+func (a *App) SetAccountLockoutPolicy(threshold, durationMin, windowMin int) error {
+	if threshold < 0 || durationMin < 0 || windowMin < 0 {
+		return fmt.Errorf("锁定策略参数无效")
+	}
+	return account.SetLockoutPolicy(uint32(threshold), uint32(durationMin), uint32(windowMin))
+}
+
 func (a *App) ChangeRdpPort(portNum uint32) error {
 	if err := port.ValidTCP(portNum); err != nil {
 		return err
@@ -108,6 +115,10 @@ func (a *App) ToggleRdp() error {
 
 func (a *App) ClearRdpHistory() (string, error) {
 	return rdp.ClearConnectionHistory()
+}
+
+func (a *App) ClearRdpHistoryByKind(kind string) (string, error) {
+	return rdp.ClearConnectionHistoryByKind(kind)
 }
 
 func (a *App) GetRdpHistory() ([]rdp.HistoryEntry, error) {
@@ -132,8 +143,20 @@ func (a *App) RemoveFirewallPort(portNum uint32) error {
 	return firewall.RemoveAllowTCP(portNum)
 }
 
+func (a *App) ClearFirewallAllowRules() error {
+	return firewall.ClearAllowRules()
+}
+
 func (a *App) SetFirewallEnabled(enabled bool) error {
 	return firewall.SetAllProfiles(enabled)
+}
+
+func (a *App) DisablePing() error {
+	return firewall.DisablePing()
+}
+
+func (a *App) EnablePing() error {
+	return firewall.EnablePing()
 }
 
 func (a *App) ApplyTimeZone(id string) error {
@@ -145,6 +168,10 @@ func (a *App) SaveNTPServer(server string) error {
 }
 
 func (a *App) SyncNTP() error { return wintime.SyncNTP() }
+
+func (a *App) TestNTPServer(server string) (string, error) {
+	return wintime.TestNTPServer(server)
+}
 
 func (a *App) LockPC() error { return power.Lock() }
 

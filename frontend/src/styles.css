@@ -19,6 +19,7 @@
   --wt-radius-sm: 10px;
   --wt-accent: #3b82f6;
   --wt-status-bg: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  --wt-desc-label-width: 84px;
 }
 
 * {
@@ -33,6 +34,7 @@ body,
   font-family: 'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei UI', sans-serif;
   background: var(--wt-page-bg);
   color: var(--wt-text-primary);
+  user-select: text;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -109,6 +111,7 @@ body,
   font-size: 14px;
   font-weight: 650;
   color: var(--wt-text-primary);
+  white-space: nowrap;
 }
 
 .wt-status-sub {
@@ -178,12 +181,15 @@ body,
   .wt-stat-grid {
     grid-template-columns: 1fr;
   }
+  .wt-actions {
+    flex-wrap: wrap;
+  }
 }
 
 /* —— Actions / forms —— */
 .wt-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 10px;
   margin-top: 4px;
@@ -194,7 +200,8 @@ body,
 }
 
 .wt-form-row {
-  max-width: 520px;
+  width: 100%;
+  max-width: none;
 }
 
 .wt-tag-row {
@@ -223,12 +230,20 @@ body,
 }
 
 /* —— Descriptions (overview) —— */
-.wt-desc :deep(.el-descriptions__label) {
-  width: 96px;
+.wt-desc .el-descriptions__label {
+  width: var(--wt-desc-label-width) !important;
+  min-width: var(--wt-desc-label-width) !important;
+  max-width: var(--wt-desc-label-width) !important;
   white-space: nowrap;
+  overflow: hidden;
 }
 
-.wt-desc :deep(.el-descriptions__content) {
+.wt-desc .el-descriptions__table {
+  width: 100% !important;
+  table-layout: fixed !important;
+}
+
+.wt-desc .el-descriptions__content {
   word-break: break-all;
 }
 

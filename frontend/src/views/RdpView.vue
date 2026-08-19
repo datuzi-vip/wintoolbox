@@ -1,5 +1,8 @@
 <script setup>
-defineProps({
+import {computed, ref} from 'vue'
+import { FORM_LABEL_WIDTH } from '../constants.js'
+
+const props = defineProps({
   status: { type: Object, default: null },
   form: { type: Object, required: true },
   busy: { type: Boolean, default: false },
@@ -7,7 +10,7 @@ defineProps({
   historyLoading: { type: Boolean, default: false },
 })
 
-defineEmits(['save-port', 'toggle', 'clear-history', 'delete-history', 'refresh-history'])
+defineEmits(['save-port', 'toggle', 'clear-history', 'clear-history-kind', 'delete-history', 'refresh-history'])
 
 const kindLabel = {
   mru: '最近主机',
@@ -32,6 +35,41 @@ function labelKind(kind) {
 function tagKind(kind) {
   return kindTag[kind] || 'info'
 }
+
+const searchText = ref('')
+const selectedKind = ref('')
+
+// Normalize possible field casing coming from backend (e.g. `Kind` vs `kind`).
+// This prevents the filter/table from showing empty when JSON key casing differs.
+const normalizedHistory = computed(() =>
+  (props.history || []).map((row) => {
+    const kind = (row.kind ?? row.Kind ?? '').toString().trim().toLowerCase()
+    return {
+      kind,
+      host: row.host ?? row.Host ?? '',
+      username: row.username ?? row.Username ?? '',
+      source: row.source ?? row.Source ?? '',
+      detail: row.detail ?? row.Detail ?? '',
+      sid: row.sid ?? row.Sid ?? '',
+    }
+  }),
+)
+
+const filteredHistory = computed(() => {
+  const q = searchText.value.trim().toLowerCase()
+  const kind = selectedKind.value
+  return normalizedHistory.value.filter((row) => {
+    if (kind && row.kind !== kind) return false
+    if (!q) return true
+    const haystack = `${row.host || ''} ${row.username || ''} ${row.source || ''} ${row.detail || ''} ${row.kind || ''}`.toLowerCase()
+    return haystack.includes(q)
+  })
+})
+
+const selectedKindCount = computed(() => {
+  if (!selectedKind.value) return 0
+  return normalizedHistory.value.filter((r) => r.kind === selectedKind.value).length
+})
 </script>
 
 <template>
@@ -62,7 +100,7 @@ function tagKind(kind) {
         </div>
       </div>
 
-      <el-form label-width="88px" class="wt-form-row">
+      <el-form :label-width="FORM_LABEL_WIDTH" class="wt-form-row">
         <el-form-item label="端口">
           <el-input-number
             v-model="form.rdpPort"
@@ -97,6 +135,24 @@ function tagKind(kind) {
       <p class="wt-detail" style="margin-top: 0">
         下列为本地远程桌面客户端留下的历史主机、用户名提示、TERMSRV 凭据、相关文件与位图缓存。清理不影响远程桌面服务开关与端口。
       </p>
+
+      <div class="wt-actions wt-actions--mt">
+        <el-select
+          v-model="selectedKind"
+          placeholder="类型（全部）"
+          clearable
+          style="width: 160px"
+        >
+          <el-option v-for="(label, key) in kindLabel" :key="key" :label="label" :value="key"/>
+        </el-select>
+        <el-input
+          v-model="searchText"
+          placeholder="搜索主机 / 用户名 / 来源 / 详情"
+          clearable
+          style="max-width: 520px; flex: 1"
+        />
+      </div>
+
       <div class="wt-actions wt-actions--mt">
         <el-button :disabled="busy || historyLoading" @click="$emit('refresh-history')">刷新列表</el-button>
         <el-button
@@ -107,18 +163,26 @@ function tagKind(kind) {
         >
           清理全部记录
         </el-button>
-        <span class="wt-count">共 {{ history.length }} 条</span>
+        <el-button
+          v-if="selectedKind"
+          type="warning"
+          :disabled="busy || historyLoading || selectedKindCount === 0"
+          @click="$emit('clear-history-kind', selectedKind)"
+        >
+          清理当前类型
+        </el-button>
+        <span class="wt-count">共 {{ filteredHistory.length }} 条</span>
       </div>
       <el-table
-        :data="history"
+        :data="filteredHistory"
         stripe
         empty-text="暂无连接记录"
         highlight-current-row
         style="width: 100%; margin-top: 12px"
       >
-        <el-table-column label="类型" width="110">
+        <el-table-column label="类型" width="140">
           <template #default="{ row }">
-            <el-tag :type="tagKind(row.kind)" size="small">{{ labelKind(row.kind) }}</el-tag>
+            <el-tag :type="tagKind(row.kind)" size="small" style="white-space: nowrap">{{ labelKind(row.kind) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="host" label="主机 / 名称" min-width="140" show-overflow-tooltip />

@@ -246,3 +246,33 @@ func SetNTPServer(server string) error {
 	_, _ = syscmd.Run("sc", "start", "W32Time")
 	return nil
 }
+
+// TestNTPServer queries the configured NTP server status via w32tm (best-effort).
+func TestNTPServer(server string) (string, error) {
+	server = strings.TrimSpace(server)
+	if server == "" {
+		return "", fmt.Errorf("NTP 服务器不能为空")
+	}
+	// Stripchart with a single sample is much faster than querying full status.
+	// Also use the project's "quick" command runner to cap process runtime.
+	out, err := syscmd.RunQuick("w32tm",
+		"/stripchart",
+		"/computer:"+server,
+		"/samples:1",
+		"/dataonly",
+	)
+	msg := strings.TrimSpace(out)
+	if msg == "" && err != nil {
+		msg = err.Error()
+	}
+	if err != nil {
+		if msg == "" {
+			return "", fmt.Errorf("NTP 测试失败")
+		}
+		return msg, fmt.Errorf("NTP 测试失败: %s", msg)
+	}
+	if msg == "" {
+		msg = "NTP 查询完成"
+	}
+	return msg, nil
+}

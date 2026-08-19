@@ -1,5 +1,5 @@
 <script setup>
-import { NTP_PRESETS } from '../constants.js'
+import { FORM_LABEL_WIDTH, NTP_PRESETS } from '../constants.js'
 
 defineProps({
   status: { type: Object, default: null },
@@ -8,7 +8,7 @@ defineProps({
   busy: { type: Boolean, default: false },
 })
 
-defineEmits(['apply-tz', 'save-ntp', 'sync'])
+defineEmits(['apply-tz', 'save-ntp', 'sync', 'test-ntp'])
 </script>
 
 <template>
@@ -26,7 +26,7 @@ defineEmits(['apply-tz', 'save-ntp', 'sync'])
     </el-card>
 
     <el-card shadow="never" header="设置" class="wt-card">
-      <el-form label-width="88px" class="wt-form-row">
+      <el-form :label-width="FORM_LABEL_WIDTH" class="wt-form-row">
         <el-form-item label="时区">
           <el-select-v2
             v-model="form.timeZone"
@@ -55,6 +55,7 @@ defineEmits(['apply-tz', 'save-ntp', 'sync'])
             <el-button type="primary" :disabled="busy" @click="$emit('apply-tz')">应用时区</el-button>
             <el-button :disabled="busy" @click="$emit('save-ntp')">保存 NTP</el-button>
             <el-button type="success" :disabled="busy" @click="$emit('sync')">立即同步</el-button>
+            <el-button type="info" :disabled="busy" @click="$emit('test-ntp')">测试 NTP</el-button>
           </div>
         </el-form-item>
       </el-form>
