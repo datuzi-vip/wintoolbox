@@ -9,9 +9,7 @@ function Assert-LastExitCode([string]$step) {
 }
 
 if (-not (Test-Path assets\app.ico)) {
-  Write-Host '==> Generating assets\app.ico' -ForegroundColor Cyan
-  python .\scripts\gen-icon.py
-  Assert-LastExitCode 'gen-icon.py'
+  throw 'Missing assets\app.ico — add the icon file before building.'
 }
 
 Write-Host '==> Syncing version from version.json' -ForegroundColor Cyan

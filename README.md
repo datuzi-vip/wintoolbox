@@ -81,7 +81,7 @@ wintoolbox/
 ├── scripts/
 │   ├── build.ps1           # 同步版本 + 前端 + rsrc + go build
 │   ├── sync-version.ps1    # 从 version.json 同步版本号
-│   └── gen-icon.py
+│   └── gen-rsrc-winres.go  # 嵌入 manifest + 图标
 ├── frontend/               # Vue3 + Element Plus + Vite
 │   ├── public/
 │   ├── src/
@@ -115,7 +115,6 @@ wintoolbox/
 │   ├── sysinfo/            # 本机概览
 │   ├── update/             # Windows Update 开关
 │   └── selfupdate/         # GitHub Release 自更新（SHA256）
-└── softcopyright/          # 软著申请材料（本地生成，已 gitignore，不入库）
 ```
 
 ### 前端 views 对照
