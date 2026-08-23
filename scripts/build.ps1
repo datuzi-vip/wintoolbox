@@ -16,6 +16,9 @@ if (-not (Test-Path assets\app.ico)) {
 
 Write-Host '==> Syncing version from version.json' -ForegroundColor Cyan
 & $PSScriptRoot\sync-version.ps1
+$cfg = Get-Content .\version.json -Raw -Encoding UTF8 | ConvertFrom-Json
+$displayVersion = "v$($cfg.version)"
+$versionedExe = "WinToolbox-$displayVersion.exe"
 
 Write-Host '==> Building frontend (Vue3 + Element Plus)' -ForegroundColor Cyan
 Push-Location frontend
@@ -52,5 +55,7 @@ Write-Host '==> Building WinToolbox.exe (Wails)' -ForegroundColor Cyan
 go build -tags 'desktop,production' -trimpath -ldflags='-s -w -H windowsgui' -o WinToolbox.exe .
 Assert-LastExitCode 'go build'
 
+Copy-Item -LiteralPath WinToolbox.exe -Destination $versionedExe -Force
+
 $size = (Get-Item WinToolbox.exe).Length
-Write-Host ("Done: WinToolbox.exe ({0:N0} bytes / {1:N2} MB)" -f $size, ($size / 1MB)) -ForegroundColor Green
+Write-Host ("Done: WinToolbox.exe + {0} ({1:N0} bytes / {2:N2} MB)" -f $versionedExe, $size, ($size / 1MB)) -ForegroundColor Green

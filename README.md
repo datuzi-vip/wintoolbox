@@ -1,7 +1,15 @@
 # WinToolbox
 
 Windows 本地运维工具箱：Go + [Wails v2](https://wails.io) + Vue3 + Element Plus。  
-版本：v1.0
+版本：v1.1
+
+## v1.1 更新说明
+
+- 优化账户锁定策略：自定义参数默认优先回填当前系统值，缺省时回退到 `10 / 30 / 30`；一键开启锁定默认调整为 `10 / 30 / 30`
+- 优化远程桌面、防火墙、时间同步等页面交互与状态刷新，减少首屏外的无效刷新请求
+- 优化 Windows 兼容性：下载的更新包与 WebView2 安装器会尽力移除 `Mark-of-the-Web`，降低被 SmartScreen / Defender 拦截的概率
+- 优化桌面构建链路：资源嵌入改为 `winres`，提升窗口图标与资源加载稳定性
+- 升级 Go / Wails 相关依赖，并完成 `v1.1` 全量构建验证
 
 ## 功能
 
@@ -132,7 +140,7 @@ wintoolbox/
 
 ## 构建
 
-**依赖**：Go 1.22+（开发环境可用 1.26）、Node.js 18+、WebView2 Runtime
+**依赖**：Go 1.22+（开发环境可用 1.27）、Node.js 18+、WebView2 Runtime
 
 ```powershell
 .\scripts\build.ps1
