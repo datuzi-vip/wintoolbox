@@ -1,8 +1,8 @@
-# 下载 WinToolbox
+# 00 · 下载 WinToolbox
 
 所有操作文档的**第一步**。
 
-## 链接
+## 下载链接
 
 - 最新版：https://github.com/datuzi-vip/wintoolbox/releases/latest  
 - 全部版本：https://github.com/datuzi-vip/wintoolbox/releases  
@@ -17,7 +17,7 @@
 
 **SmartScreen**：更多信息 → **仍要运行**。
 
-![下载拦截示意（模拟）](./images/00-download-keep.png)
+![下载拦截示意（模拟）](./images/00-download.png)
 
 ## 校验（可选）
 
@@ -30,3 +30,5 @@ Get-FileHash .\WinToolbox-v1.2.0.exe -Algorithm SHA256
 ## 运行
 
 **以管理员身份运行**（或双击后在 UAC 允许）。
+
+返回：[文档首页](./README.md)

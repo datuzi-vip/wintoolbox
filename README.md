@@ -6,14 +6,17 @@ Windows 本地运维工具箱：Go + [Wails v2](https://wails.io) + Vue3 + Eleme
 ## 文档
 
 各操作文档**第一步均为下载本软件**：https://github.com/datuzi-vip/wintoolbox/releases/latest  
-浏览器拦截时请点 **保留 / 保持**；详见 [下载说明](./docs/download.md)。
+浏览器拦截时请点 **保留 / 保持**；详见 [00 · 下载](./docs/00-download.md)。
 
 - [文档首页](./docs/README.md)
-- [下载说明](./docs/download.md)
-- [系统加固指南](./docs/windows-hardening.md)
-- [修改远程桌面端口](./docs/change-rdp-port.md)
-- [关闭 / 恢复系统更新](./docs/disable-windows-update.md)
-- [修改本地账户密码](./docs/change-password.md)
+- [00 · 下载](./docs/00-download.md)
+- [90 · 系统加固指南](./docs/90-hardening-guide.md)
+- [02 · 本地账户](./docs/02-local-account.md)
+- [03 · 远程桌面](./docs/03-remote-desktop.md)
+- [04 · 防火墙](./docs/04-firewall.md)
+- [05 · 安全加固](./docs/05-security-harden.md)
+- [09 · 系统更新](./docs/09-windows-update.md)
+- [全部功能文档](./docs/README.md)
 
 ## v1.2.0 更新说明
 
@@ -22,7 +25,7 @@ Windows 本地运维工具箱：Go + [Wails v2](https://wails.io) + Vue3 + Eleme
 - 远程桌面支持 **强制 NLA**；防火墙新增 **高危端口预设**（135/139/445/5985/5986）
 - 全面加固状态探测与操作校验（写后复查、按关闭前配置备份恢复、超时未知态提示）
 - 优化各页状态刷新速度（批量探测、规则列表快速查询、防竞态序号）
-- 新增图文操作文档（加固 / 改 RDP 端口 / 关更新 / 改密码）
+- 新增图文操作文档（全功能编号：`00`–`10` + `90` 加固指南，2× 高清截图标注）
 
 ## 功能
 

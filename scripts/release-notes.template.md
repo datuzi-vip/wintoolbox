@@ -31,10 +31,12 @@ Get-FileHash .\{{EXE}} -Algorithm SHA256
 
 ### 文档
 
-- [系统加固指南](https://github.com/datuzi-vip/wintoolbox/blob/main/docs/windows-hardening.md)
-- [修改远程桌面端口](https://github.com/datuzi-vip/wintoolbox/blob/main/docs/change-rdp-port.md)
-- [关闭系统更新](https://github.com/datuzi-vip/wintoolbox/blob/main/docs/disable-windows-update.md)
-- [修改本地账户密码](https://github.com/datuzi-vip/wintoolbox/blob/main/docs/change-password.md)
+- [文档首页](https://github.com/datuzi-vip/wintoolbox/blob/main/docs/README.md)
+- [00 · 下载](https://github.com/datuzi-vip/wintoolbox/blob/main/docs/00-download.md)
+- [90 · 系统加固指南](https://github.com/datuzi-vip/wintoolbox/blob/main/docs/90-hardening-guide.md)
+- [02 · 本地账户](https://github.com/datuzi-vip/wintoolbox/blob/main/docs/02-local-account.md)
+- [03 · 远程桌面](https://github.com/datuzi-vip/wintoolbox/blob/main/docs/03-remote-desktop.md)
+- [09 · 系统更新](https://github.com/datuzi-vip/wintoolbox/blob/main/docs/09-windows-update.md)
 
 ### 资产
 
