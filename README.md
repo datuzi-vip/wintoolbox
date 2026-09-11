@@ -5,7 +5,11 @@ Windows 本地运维工具箱：Go + [Wails v2](https://wails.io) + Vue3 + Eleme
 
 ## 文档
 
+各操作文档**第一步均为下载本软件**：https://github.com/datuzi-vip/wintoolbox/releases/latest  
+浏览器拦截时请点 **保留 / 保持**；详见 [下载说明](./docs/download.md)。
+
 - [文档首页](./docs/README.md)
+- [下载 WinToolbox](./docs/download.md)
 - [Windows 系统加固指南](./docs/windows-hardening.md)（图文 + 操作选项标注）
 - [修改远程桌面端口](./docs/change-rdp-port.md)
 - [关闭 / 恢复系统更新](./docs/disable-windows-update.md)
@@ -16,7 +20,7 @@ Windows 本地运维工具箱：Go + [Wails v2](https://wails.io) + Vue3 + Eleme
 - 新增 **安全加固** 页：一键禁用 SMBv1、关闭并拦截 WinRM、限制匿名枚举
 - 新增账户能力：禁用来宾、关闭自动登录、密码策略；锁定策略支持自定义阈值/时长
 - 远程桌面支持 **强制 NLA**；防火墙新增 **高危端口预设**（135/139/445/5985/5986）
-- 全面加固状态探测与操作校验（写后复查、快照恢复、超时未知态提示）
+- 全面加固状态探测与操作校验（写后复查、按关闭前配置备份恢复、超时未知态提示）
 - 优化各页状态刷新速度（批量探测、规则列表快速查询、防竞态序号）
 - 新增图文操作文档（加固 / 改 RDP 端口 / 关更新 / 改密码）
 
@@ -32,7 +36,7 @@ Windows 本地运维工具箱：Go + [Wails v2](https://wails.io) + Vue3 + Eleme
 | 防病毒   | 关闭/恢复 Defender 实时防护（含策略回退与复查） |
 | 时间同步 | 时区、NTP 预设、立即同步、测试 NTP |
 | 电源     | 锁定、延时重启/关机、取消计划 |
-| 系统更新 | 关闭/恢复 Windows Update（快照恢复） |
+| 系统更新 | 关闭/恢复 Windows Update（按关闭前的配置备份还原，非云主机磁盘快照） |
 | 软件更新 | GitHub Release 检测、SHA256 校验下载与安装 |
 
 ## 支持系统

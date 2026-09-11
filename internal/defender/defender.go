@@ -45,7 +45,7 @@ func GetStatus() Status {
 // Disable turns off Defender realtime protection.
 func Disable() error {
 	if err := saveSnapshotIfNeeded(); err != nil {
-		return fmt.Errorf("保存防病毒快照失败，已中止关闭: %w", err)
+		return fmt.Errorf("保存防病毒配置备份失败，已中止关闭: %w", err)
 	}
 
 	out, err := syscmd.RunPS(`
@@ -91,7 +91,7 @@ try {
 // Enable turns realtime protection back on (UI "恢复" always means force-on).
 func Enable() error {
 	if _, _, err := loadSnapshot(); err != nil {
-		return fmt.Errorf("读取防病毒快照失败: %w", err)
+		return fmt.Errorf("读取防病毒配置备份失败: %w", err)
 	}
 
 	// Clear WinToolbox disable policy so preference can take effect.

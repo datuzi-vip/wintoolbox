@@ -106,7 +106,7 @@ func GetStatus() Status {
 // Previous policy/service start values are snapshotted once for Enable() restore.
 func Disable() error {
 	if err := saveUpdateSnapshotIfNeeded(); err != nil {
-		return fmt.Errorf("保存更新快照失败，已中止关闭: %w", err)
+		return fmt.Errorf("保存更新配置备份失败，已中止关闭: %w", err)
 	}
 
 	if err := setUpdatePolicyDisabled(); err != nil {
@@ -142,7 +142,7 @@ func Disable() error {
 func Enable() error {
 	restored, err := restoreUpdateSnapshot()
 	if err != nil {
-		return fmt.Errorf("恢复更新快照失败: %w", err)
+		return fmt.Errorf("按关闭前配置备份恢复更新失败: %w", err)
 	}
 	if !restored {
 		if err := clearUpdatePolicy(); err != nil {

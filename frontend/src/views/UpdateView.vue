@@ -25,7 +25,7 @@ const tagText = computed(() => {
 <template>
   <div>
     <h2 class="page-title">系统更新</h2>
-    <p class="page-desc">一键暂停或恢复 Windows Update 相关策略与服务</p>
+    <p class="page-desc">一键暂停或恢复 Windows Update（恢复时优先还原关闭前的策略与服务配置，非整机快照）</p>
 
     <el-card shadow="never" header="Windows Update" class="wt-card">
       <div class="wt-status-block">
