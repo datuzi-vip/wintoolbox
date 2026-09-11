@@ -188,7 +188,13 @@ func localAdminSet() (map[string]bool, bool) {
 			continue
 		}
 		if i := strings.LastIndex(name, `\`); i >= 0 {
-			name = name[i+1:]
+			domain := name[:i]
+			user := name[i+1:]
+			// Only treat DOMAIN\user as a local admin match when domain is this machine.
+			if !isLocalAdminDomain(domain) {
+				continue
+			}
+			name = user
 		}
 		set[strings.ToLower(name)] = true
 	}
@@ -236,8 +242,40 @@ func isLocalAdmin(username string) bool {
 		if strings.EqualFold(name, username) {
 			return true
 		}
-		// DOMAIN\user form
+		// DOMAIN\user: only treat as local when the domain is this machine (not a real AD domain).
 		if i := strings.LastIndex(name, `\`); i >= 0 && strings.EqualFold(name[i+1:], username) {
+			if isLocalAdminDomain(name[:i]) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func isLocalAdminDomain(domain string) bool {
+	domain = strings.TrimSpace(domain)
+	if domain == "" || domain == "." {
+		return true
+	}
+	candidates := make([]string, 0, 4)
+	if host, err := os.Hostname(); err == nil {
+		host = strings.TrimSuffix(strings.TrimSpace(host), ".")
+		if host != "" {
+			candidates = append(candidates, host)
+			if i := strings.IndexByte(host, '.'); i > 0 {
+				candidates = append(candidates, host[:i])
+			}
+			// NetBIOS computer name is capped at 15 characters.
+			if len(host) > 15 {
+				candidates = append(candidates, host[:15])
+			}
+		}
+	}
+	if cn := strings.TrimSpace(os.Getenv("COMPUTERNAME")); cn != "" {
+		candidates = append(candidates, cn)
+	}
+	for _, c := range candidates {
+		if strings.EqualFold(domain, c) {
 			return true
 		}
 	}
@@ -315,6 +353,18 @@ func SetAdmin(username string, admin bool) error {
 		if err2 != nil {
 			return fmt.Errorf("调整管理员组成员失败: %v", err)
 		}
+	}
+	admins, ok := localAdminSet()
+	if !ok {
+		return fmt.Errorf("已提交管理员调整，但复查管理员组成员失败")
+	}
+	isAdmin := admins[strings.ToLower(username)]
+	if isAdmin != admin {
+		want := "管理员"
+		if !admin {
+			want = "标准用户"
+		}
+		return fmt.Errorf("已提交管理员调整，但复查仍不是%s", want)
 	}
 	return nil
 }

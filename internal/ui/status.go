@@ -9,6 +9,7 @@ import (
 	"wintoolbox/internal/account"
 	"wintoolbox/internal/defender"
 	"wintoolbox/internal/firewall"
+	"wintoolbox/internal/harden"
 	"wintoolbox/internal/rdp"
 	"wintoolbox/internal/sysinfo"
 	"wintoolbox/internal/update"
@@ -19,22 +20,6 @@ const (
 	overviewDetailTimeout  = 120 * time.Second
 	statusCollectorTimeout = 15 * time.Second
 )
-
-type statusCollect struct {
-	overview     sysinfo.Overview
-	accounts     []account.Info
-	accErr       error
-	rdp          rdp.Status
-	rdpErr       error
-	update       update.Status
-	defender     defender.Status
-	fw           firewall.ProfileStatus
-	time         wintime.Status
-	ping         firewall.PingBlockStatus
-	pingTimedOut bool
-	lockout      account.LockoutPolicy
-	lockoutEr    error
-}
 
 // LoadStatus gathers a fast snapshot for first paint.
 func LoadStatus(invalidateOverview bool) (Status, error) {
@@ -50,19 +35,28 @@ func LoadStatus(invalidateOverview bool) (Status, error) {
 		st  rdp.Status
 		err error
 	}
-	type fwRes struct {
-		st firewall.ProfileStatus
-	}
-	type pingRes struct {
-		st firewall.PingBlockStatus
-	}
 	type lockoutRes struct {
 		pol account.LockoutPolicy
 		err error
 	}
+	type fwBundleRes struct {
+		fw   firewall.ProfileStatus
+		ping firewall.PingBlockStatus
+		risk firewall.RiskBlockStatus
+	}
+	type guestRes struct {
+		st account.GuestStatus
+	}
+	type autoRes struct {
+		st account.AutoLogonStatus
+	}
+	type pwdRes struct {
+		st account.PasswordPolicy
+	}
+	type hardenRes struct {
+		st harden.Status
+	}
 
-	// Avoid blocking UI refresh: only wait up to statusCollectorTimeout for all modules.
-	// Each goroutine writes to its buffered channel once, preventing data races.
 	ctx, cancel := context.WithTimeout(context.Background(), statusCollectorTimeout)
 	defer cancel()
 
@@ -76,11 +70,16 @@ func LoadStatus(invalidateOverview bool) (Status, error) {
 		gotTime     bool
 		gotPing     bool
 		gotLockout  bool
+		gotRisk     bool
+		gotGuest    bool
+		gotAuto     bool
+		gotPwd      bool
+		gotHarden   bool
 	)
 
 	var (
-		overview sysinfo.Overview
-		accounts []account.Info
+		overview  sysinfo.Overview
+		accounts  []account.Info
 		accErr    error
 		rdpSt     rdp.Status
 		rdpErr    error
@@ -91,24 +90,40 @@ func LoadStatus(invalidateOverview bool) (Status, error) {
 		pingSt    firewall.PingBlockStatus
 		lockout   account.LockoutPolicy
 		lockoutEr error
+		riskSt    firewall.RiskBlockStatus
+		guestSt   account.GuestStatus
+		autoSt    account.AutoLogonStatus
+		pwdSt     account.PasswordPolicy
+		hardenSt  harden.Status
 	)
 
-	// Defaults for timeout paths (keep UI safe & predictable).
 	fwSt = firewall.ProfileStatus{Domain: "超时", Private: "超时", Public: "超时"}
-	pingSt = firewall.PingBlockStatus{} // false/false => UI "partial/enabled" depends on Mode(); we'll override state below
+	pingSt = firewall.PingBlockStatus{}
 	timeSt = wintime.Status{TimeZone: "-", NTPServer: "-", LocalTime: "-"}
 	lockout = account.LockoutPolicy{Threshold: -1, Disabled: false, Unknown: true, Detail: "读取超时"}
 	lockoutEr = fmt.Errorf("超时")
+	riskSt = firewall.RiskBlockStatus{Detail: "读取超时"}
+	guestSt = account.GuestStatus{Unknown: true, Detail: "读取超时"}
+	autoSt = account.AutoLogonStatus{Unknown: true, Detail: "读取超时"}
+	pwdSt = account.PasswordPolicy{MinLength: -1, ComplexityUnknown: true, Unknown: true, Detail: "读取超时"}
+	hardenSt = harden.Status{
+		Smb1Unknown: true, Smb1Detail: "读取超时",
+		WinRMUnknown: true, WinRMDetail: "读取超时",
+		AnonymousUnknown: true, AnonymousDetail: "读取超时",
+	}
 
 	chOverview := make(chan sysinfo.Overview, 1)
 	chAcc := make(chan accRes, 1)
 	chRdp := make(chan rdpRes, 1)
 	chUpdate := make(chan update.Status, 1)
 	chDef := make(chan defender.Status, 1)
-	chFw := make(chan fwRes, 1)
+	chFwBundle := make(chan fwBundleRes, 1)
 	chTime := make(chan wintime.Status, 1)
-	chPing := make(chan pingRes, 1)
 	chLockout := make(chan lockoutRes, 1)
+	chGuest := make(chan guestRes, 1)
+	chAuto := make(chan autoRes, 1)
+	chPwd := make(chan pwdRes, 1)
+	chHarden := make(chan hardenRes, 1)
 
 	go func() { chOverview <- sysinfo.GetOverviewFast() }()
 	go func() {
@@ -121,20 +136,30 @@ func LoadStatus(invalidateOverview bool) (Status, error) {
 	}()
 	go func() { chUpdate <- update.GetStatus() }()
 	go func() { chDef <- defender.GetStatus() }()
-	go func() { chFw <- fwRes{st: firewall.GetProfiles()} }()
+	// Serialize firewall probes to avoid PowerShell contention (faster + more reliable under 15s).
+	go func() {
+		chFwBundle <- fwBundleRes{
+			fw:   firewall.GetProfiles(),
+			ping: firewall.GetPingBlockStatus(),
+			risk: firewall.GetRiskBlockStatus(),
+		}
+	}()
 	go func() { chTime <- wintime.GetStatus() }()
-	go func() { chPing <- pingRes{st: firewall.GetPingBlockStatus()} }()
 	go func() {
 		p, err := account.GetLockoutPolicy()
 		chLockout <- lockoutRes{pol: p, err: err}
 	}()
+	go func() { chGuest <- guestRes{st: account.GetGuestStatus()} }()
+	go func() { chAuto <- autoRes{st: account.GetAutoLogonStatus()} }()
+	go func() { chPwd <- pwdRes{st: account.GetPasswordPolicy()} }()
+	go func() { chHarden <- hardenRes{st: harden.GetStatus()} }()
 
-	const moduleCount = 9
+	const moduleCount = 12
 	received := 0
 	for received < moduleCount {
 		select {
 		case <-ctx.Done():
-			received = moduleCount // stop waiting; remaining modules keep timeout defaults
+			received = moduleCount
 		case overview = <-chOverview:
 			gotOverview = true
 			received++
@@ -152,38 +177,40 @@ func LoadStatus(invalidateOverview bool) (Status, error) {
 		case defSt = <-chDef:
 			gotDefender = true
 			received++
-		case r := <-chFw:
-			gotFw = true
-			fwSt = r.st
+		case r := <-chFwBundle:
+			gotFw, gotPing, gotRisk = true, true, true
+			fwSt, pingSt, riskSt = r.fw, r.ping, r.risk
 			received++
 		case timeSt = <-chTime:
 			gotTime = true
-			received++
-		case r := <-chPing:
-			gotPing = true
-			pingSt = r.st
 			received++
 		case r := <-chLockout:
 			gotLockout = true
 			lockout, lockoutEr = r.pol, r.err
 			received++
+		case r := <-chGuest:
+			gotGuest = true
+			guestSt = r.st
+			received++
+		case r := <-chAuto:
+			gotAuto = true
+			autoSt = r.st
+			received++
+		case r := <-chPwd:
+			gotPwd = true
+			pwdSt = r.st
+			received++
+		case r := <-chHarden:
+			gotHarden = true
+			hardenSt = r.st
+			received++
 		}
 	}
 
-	// Accounts are required for UI correctness.
-	if accErr != nil || !gotAcc {
-		if accErr == nil {
-			accErr = fmt.Errorf("读取超时")
-		}
-		return Status{}, fmt.Errorf("读取本地账户失败: %w", accErr)
-	}
-
-	// Firewall profile/ping may be partial due to timeout; reflect it in UI semantics.
 	pingTimedOut := !gotPing
 
 	st := Status{
 		Overview:         overviewFrom(overview),
-		Accounts:         accountsFrom(accounts),
 		RdpAvailable:     rdpErr == nil && gotRdp,
 		TimeZones:        wintime.EnsureZoneOption(wintime.CommonZones(), timeSt.TimeZone),
 		FirewallSummary:  fwSt.Summary(),
@@ -203,9 +230,88 @@ func LoadStatus(invalidateOverview bool) (Status, error) {
 		TimeZone:         timeSt.TimeZone,
 		NTPServer:        timeSt.NTPServer,
 		TimeText:         fmt.Sprintf("%s  ·  %s  ·  NTP %s", timeSt.LocalTime, timeSt.TimeZone, timeSt.NTPServer),
-		LockoutThreshold: account.DefaultEnableThreshold,
-		LockoutDuration:  account.DefaultEnableDuration,
-		LockoutWindow:    account.DefaultEnableWindow,
+		LockoutThreshold: -1,
+		LockoutDuration:  -1,
+		LockoutWindow:    -1,
+		PasswordMinLength: -1,
+		PasswordUnknown:   true,
+		PasswordComplexityUnknown: true,
+		PasswordPolicyDetail:      "读取超时",
+	}
+
+	if !gotAcc {
+		st.Warnings = append(st.Warnings, "本地账户列表读取超时")
+	} else if accErr != nil {
+		st.Warnings = append(st.Warnings, "读取本地账户失败: "+accErr.Error())
+	} else {
+		st.Accounts = accountsFrom(accounts)
+	}
+
+	if gotRisk {
+		st.RiskPortsBlocked = riskSt.AllBlocked
+		st.RiskPortsPartial = riskSt.Partial
+		st.RiskPortsUnknown = false
+		st.RiskPortsDetail = riskSt.Detail
+	} else {
+		st.RiskPortsBlocked = false
+		st.RiskPortsPartial = false
+		st.RiskPortsUnknown = true
+		st.RiskPortsDetail = "读取超时"
+		st.Warnings = append(st.Warnings, "高危端口拦截状态读取超时")
+	}
+
+	if gotGuest {
+		st.GuestExists = guestSt.Exists
+		st.GuestEnabled = guestSt.Enabled
+		st.GuestUnknown = guestSt.Unknown
+		st.GuestDetail = guestSt.Detail
+	} else {
+		st.GuestUnknown = true
+		st.GuestDetail = "读取超时"
+	}
+
+	if gotAuto {
+		st.AutoLogonEnabled = autoSt.Enabled
+		st.AutoLogonUnknown = autoSt.Unknown
+		st.AutoLogonDetail = autoSt.Detail
+	} else {
+		st.AutoLogonUnknown = true
+		st.AutoLogonDetail = "读取超时"
+	}
+
+	if gotPwd {
+		st.PasswordMinLength = pwdSt.MinLength // may be -1 when unreadable
+		st.PasswordComplexity = pwdSt.Complexity
+		st.PasswordComplexityUnknown = pwdSt.ComplexityUnknown
+		st.PasswordUnknown = pwdSt.Unknown
+		st.PasswordPolicyDetail = pwdSt.Detail
+	} else {
+		st.PasswordMinLength = -1
+		st.PasswordComplexity = false
+		st.PasswordComplexityUnknown = true
+		st.PasswordUnknown = true
+		st.PasswordPolicyDetail = "读取超时"
+		st.Warnings = append(st.Warnings, "密码策略读取超时")
+	}
+
+	if gotHarden {
+		st.Smb1Disabled = hardenSt.Smb1Disabled
+		st.Smb1Unknown = hardenSt.Smb1Unknown
+		st.Smb1Detail = hardenSt.Smb1Detail
+		st.WinRMHardened = hardenSt.WinRMHardened
+		st.WinRMUnknown = hardenSt.WinRMUnknown
+		st.WinRMDetail = hardenSt.WinRMDetail
+		st.AnonymousOK = hardenSt.AnonymousOK
+		st.AnonymousUnknown = hardenSt.AnonymousUnknown
+		st.AnonymousDetail = hardenSt.AnonymousDetail
+	} else {
+		st.Smb1Unknown = true
+		st.Smb1Detail = "读取超时"
+		st.WinRMUnknown = true
+		st.WinRMDetail = "读取超时"
+		st.AnonymousUnknown = true
+		st.AnonymousDetail = "读取超时"
+		st.Warnings = append(st.Warnings, "安全加固状态读取超时")
 	}
 
 	if !gotFw || fwSt.Domain == "超时" || fwSt.Private == "超时" || fwSt.Public == "超时" {
@@ -218,6 +324,8 @@ func LoadStatus(invalidateOverview bool) (Status, error) {
 
 	if gotRdp && rdpErr == nil {
 		st.RdpEnabled, st.RdpPort = rdpSt.Enabled, rdpSt.Port
+		st.RdpNLA = rdpSt.NLA
+		st.RdpNLAUnknown = rdpSt.NLAUnknown
 	} else if gotRdp {
 		st.Warnings = append(st.Warnings, "远程桌面状态读取失败: "+rdpErr.Error())
 	} else {
@@ -228,14 +336,16 @@ func LoadStatus(invalidateOverview bool) (Status, error) {
 		st.LockoutDisabled = lockout.Disabled
 		st.LockoutUnknown = lockout.Unknown
 		st.LockoutDetail = lockout.Detail
-		if lockout.Threshold >= 0 {
-			st.LockoutThreshold = lockout.Threshold
-		}
-		if n := parseLockoutMinutes(lockout.Duration); n >= 0 {
-			st.LockoutDuration = n
-		}
-		if n := parseLockoutMinutes(lockout.Window); n >= 0 {
-			st.LockoutWindow = n
+		if !lockout.Unknown {
+			if lockout.Threshold >= 0 {
+				st.LockoutThreshold = lockout.Threshold
+			}
+			if n := parseLockoutMinutes(lockout.Duration); n >= 0 {
+				st.LockoutDuration = n
+			}
+			if n := parseLockoutMinutes(lockout.Window); n >= 0 {
+				st.LockoutWindow = n
+			}
 		}
 		if lockout.Unknown {
 			st.Warnings = append(st.Warnings, "账户锁定策略无法解析（系统语言可能不受支持）")
@@ -245,13 +355,43 @@ func LoadStatus(invalidateOverview bool) (Status, error) {
 		st.LockoutUnknown = true
 		if lockoutEr != nil {
 			st.Warnings = append(st.Warnings, "账户锁定策略读取失败: "+lockoutEr.Error())
+		} else {
+			st.Warnings = append(st.Warnings, "账户锁定策略读取超时")
 		}
 	}
 
+	if gotUpdate {
+		st.UpdateUnknown = false
+	} else {
+		st.UpdateDisabled = false
+		st.UpdateUnknown = true
+		st.UpdateDetail = "读取超时"
+		st.Warnings = append(st.Warnings, "系统更新状态读取超时")
+	}
+	if gotDefender {
+		st.DefenderUnknown = defSt.Unknown
+		if defSt.Unknown {
+			st.Warnings = append(st.Warnings, "防病毒状态无法确定")
+		}
+	} else {
+		st.DefenderDisabled = false
+		st.DefenderUnknown = true
+		st.DefenderDetail = "读取超时"
+		st.Warnings = append(st.Warnings, "防病毒状态读取超时")
+	}
+	if gotTime {
+		st.TimeUnknown = false
+	} else {
+		st.TimeUnknown = true
+		st.TimeZone = ""
+		st.NTPServer = ""
+		st.TimeText = "时间状态读取超时"
+		st.Warnings = append(st.Warnings, "时间/NTP 状态读取超时")
+	}
 	_ = gotOverview
-	_ = gotUpdate
-	_ = gotDefender
-	_ = gotTime
+	if !gotOverview {
+		st.Warnings = append(st.Warnings, "系统概览读取超时")
+	}
 	return st, nil
 }
 

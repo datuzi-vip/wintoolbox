@@ -194,22 +194,28 @@ Set-NetFirewallProfile -Profile Domain,Private,Public -Enabled %s -ErrorAction S
 Write-Output 'OK'
 `, flag)
 	out, err := syscmd.RunPS(ps)
-	if err == nil && strings.Contains(out, "OK") {
-		return nil
-	}
-
-	psMsg := strings.TrimSpace(out)
-	if psMsg == "" && err != nil {
-		psMsg = err.Error()
-	}
-
-	out2, err2 := syscmd.Run("netsh", "advfirewall", "set", "allprofiles", "state", state)
-	if err2 != nil {
-		msg2 := strings.TrimSpace(out2)
-		if msg2 == "" {
-			msg2 = err2.Error()
+	psOK := err == nil && strings.Contains(out, "OK")
+	if !psOK {
+		psMsg := strings.TrimSpace(out)
+		if psMsg == "" && err != nil {
+			psMsg = err.Error()
 		}
-		return fmt.Errorf("设置防火墙失败:\nPowerShell: %s\nnetsh: %s", psMsg, msg2)
+		out2, err2 := syscmd.Run("netsh", "advfirewall", "set", "allprofiles", "state", state)
+		if err2 != nil {
+			msg2 := strings.TrimSpace(out2)
+			if msg2 == "" {
+				msg2 = err2.Error()
+			}
+			return fmt.Errorf("设置防火墙失败:\nPowerShell: %s\nnetsh: %s", psMsg, msg2)
+		}
+	}
+	st := GetProfiles()
+	if enabled {
+		if !st.AllEnabled() {
+			return fmt.Errorf("已提交开启防火墙，但复查未全部开启（域=%s 专用=%s 公用=%s）", st.Domain, st.Private, st.Public)
+		}
+	} else if !st.AllDisabled() {
+		return fmt.Errorf("已提交关闭防火墙，但复查未全部关闭（域=%s 专用=%s 公用=%s）", st.Domain, st.Private, st.Public)
 	}
 	return nil
 }
@@ -242,8 +248,8 @@ func EnablePing() error {
 	for _, name := range []string{pingBlockRuleName, pingBlockRuleNameV4, pingBlockRuleNameV6} {
 		_ = removePingRule(name)
 	}
-	if HasPingBlockRule() {
-		return fmt.Errorf("恢复 ping 失败: IPv4/IPv6 禁 ping 规则仍存在")
+	if anyPingBlockRulePresent() {
+		return fmt.Errorf("恢复 ping 失败: 仍存在禁 ping 规则（含旧规则名）")
 	}
 	return nil
 }
@@ -252,15 +258,22 @@ func disablePingRule(name, protocol, icmpType string) error {
 	ps := fmt.Sprintf(`
 $ErrorActionPreference='Stop'
 $name='%s'
+$proto='%s'
+$icmp=%s
 $r = Get-NetFirewallRule -Name $name -ErrorAction SilentlyContinue
 if ($r) {
   Set-NetFirewallRule -Name $name -Direction Inbound -Action Block -Enabled True -Profile Any -ErrorAction Stop | Out-Null
+  $r | Get-NetFirewallPortFilter | Set-NetFirewallPortFilter -Protocol $proto -IcmpType $icmp -ErrorAction Stop | Out-Null
 } else {
-  New-NetFirewallRule -DisplayName $name -Name $name -Direction Inbound -Action Block -Protocol %s -IcmpType %s -Profile Any -Enabled True -Description 'WinToolbox block ping rule' | Out-Null
+  New-NetFirewallRule -DisplayName $name -Name $name -Direction Inbound -Action Block -Protocol $proto -IcmpType $icmp -Profile Any -Enabled True -Description 'WinToolbox block ping rule' | Out-Null
 }
 $check = Get-NetFirewallRule -Name $name -ErrorAction Stop
 if ($check.Enabled -ne 'True' -and $check.Enabled -ne $true) { throw 'rule not enabled' }
 if ($check.Action -ne 'Block' -and $check.Action -ne 4) { throw 'rule not blocking' }
+$p = $check | Get-NetFirewallPortFilter
+if ([string]$p.Protocol -ne $proto) { throw ('protocol mismatch: ' + $p.Protocol) }
+$types = @($p.IcmpType | ForEach-Object { [string]$_ })
+if ($types -notcontains $icmp) { throw ('icmp mismatch: ' + ($types -join ',')) }
 Write-Output 'OK'
 `, name, protocol, icmpType)
 	out, err := syscmd.RunPS(ps)
@@ -273,6 +286,7 @@ Write-Output 'OK'
 		psMsg = err.Error()
 	}
 
+	_, _ = syscmd.Run("netsh", "advfirewall", "firewall", "delete", "rule", "name="+name)
 	netshProto := strings.ToLower(protocol) + ":" + icmpType + ",any"
 	out2, err2 := syscmd.Run("netsh", "advfirewall", "firewall", "add", "rule",
 		"name="+name,
@@ -283,25 +297,14 @@ Write-Output 'OK'
 		"protocol="+netshProto,
 	)
 	if err2 != nil {
-		_, _ = syscmd.Run("netsh", "advfirewall", "firewall", "set", "rule",
-			"name="+name,
-			"new",
-			"enable=yes",
-			"action=block",
-			"dir=in",
-			"profile=domain,private,public",
-		)
-		if hasPingBlockRuleName(name) {
-			return nil
-		}
 		msg2 := strings.TrimSpace(out2)
 		if msg2 == "" {
 			msg2 = err2.Error()
 		}
-		return fmt.Errorf("禁 ping 失败（%s）:\nPowerShell: %s\nnetsh: %s", name, psMsg, msg2)
+		return fmt.Errorf("创建禁 ping 规则失败 (%s): PowerShell: %s; netsh: %s", name, psMsg, msg2)
 	}
 	if !hasPingBlockRuleName(name) {
-		return fmt.Errorf("禁 ping 规则已提交，但未校验到生效规则（%s）", name)
+		return fmt.Errorf("禁 ping 规则已提交，但未校验到生效: %s", name)
 	}
 	return nil
 }
@@ -326,31 +329,88 @@ func HasPingBlockRule() bool {
 
 // GetPingBlockStatus reports the active state of the WinToolbox ping block rules.
 func GetPingBlockStatus() PingBlockStatus {
+	m := probePingBlockRules()
+	legacy := m[pingBlockRuleName]
 	return PingBlockStatus{
-		IPv4: hasPingBlockRuleName(pingBlockRuleNameV4),
-		IPv6: hasPingBlockRuleName(pingBlockRuleNameV6),
+		IPv4: m[pingBlockRuleNameV4] || legacy,
+		IPv6: m[pingBlockRuleNameV6],
 	}
 }
 
-func hasPingBlockRuleName(name string) bool {
-	out, err := syscmd.Run("netsh", "advfirewall", "firewall", "show", "rule", "name="+name, "verbose")
-	if err == nil && strings.Contains(out, name) &&
-		(strings.Contains(strings.ToLower(out), "block") || strings.Contains(out, "阻止")) &&
-		netshRuleEnabled(out) {
-		return true
-	}
+func anyPingBlockRulePresent() bool {
+	m := probePingBlockRules()
+	return m[pingBlockRuleName] || m[pingBlockRuleNameV4] || m[pingBlockRuleNameV6]
+}
 
+func probePingBlockRules() map[string]bool {
+	names := []string{pingBlockRuleName, pingBlockRuleNameV4, pingBlockRuleNameV6}
+	out := map[string]bool{}
 	ps := fmt.Sprintf(`
-$r=Get-NetFirewallRule -Name '%s' -ErrorAction SilentlyContinue
-if(-not $r){Write-Output 'NO'; exit 0}
-Write-Output ("ENABLED=" + $r.Enabled + ";ACTION=" + $r.Action)
-`, name)
-	out, err = syscmd.RunPS(ps)
-	if err != nil {
+$items=@(
+  @{Name='%s'; Proto='ICMPv4'; Icmp='8'},
+  @{Name='%s'; Proto='ICMPv4'; Icmp='8'},
+  @{Name='%s'; Proto='ICMPv6'; Icmp='128'}
+)
+foreach($it in $items){
+  $name=$it.Name; $proto=$it.Proto; $icmp=$it.Icmp
+  $r=Get-NetFirewallRule -Name $name -ErrorAction SilentlyContinue
+  if(-not $r){ Write-Output ($name + '=0'); continue }
+  $en=($r.Enabled -eq $true -or [string]$r.Enabled -eq 'True')
+  $blk=([string]$r.Action -eq 'Block' -or [int]$r.Action -eq 4)
+  $p=$r|Get-NetFirewallPortFilter
+  $protoOk=([string]$p.Protocol -eq $proto)
+  $types=@($p.IcmpType | ForEach-Object { [string]$_ })
+  $icmpOk=($types -contains $icmp)
+  if($en -and $blk -and $protoOk -and $icmpOk){ Write-Output ($name + '=1') } else { Write-Output ($name + '=0') }
+}
+`, pingBlockRuleName, pingBlockRuleNameV4, pingBlockRuleNameV6)
+	text, err := syscmd.RunPSQuick(ps)
+	if err == nil && strings.TrimSpace(text) != "" {
+		for _, line := range strings.Split(text, "\n") {
+			line = strings.TrimSpace(line)
+			for _, name := range names {
+				if strings.HasPrefix(line, name+"=") {
+					out[name] = strings.HasSuffix(line, "=1")
+				}
+			}
+		}
+		if len(out) == len(names) {
+			return out
+		}
+	}
+	for _, name := range names {
+		out[name] = hasPingBlockRuleNameNetsh(name)
+	}
+	return out
+}
+
+func hasPingBlockRuleName(name string) bool {
+	// Single-rule verify path: avoid re-probing all ping rules via PowerShell.
+	return hasPingBlockRuleNameNetsh(name)
+}
+
+func hasPingBlockRuleNameNetsh(name string) bool {
+	out, err := syscmd.RunQuick("netsh", "advfirewall", "firewall", "show", "rule", "name="+name, "verbose")
+	if err != nil || !strings.Contains(out, name) {
 		return false
 	}
-	return (strings.Contains(out, "ENABLED=True") || strings.Contains(out, "ENABLED=true")) &&
-		(strings.Contains(out, "ACTION=Block") || strings.Contains(out, "ACTION=4") || strings.Contains(strings.ToLower(out), "block"))
+	if !(strings.Contains(strings.ToLower(out), "block") || strings.Contains(out, "阻止")) {
+		return false
+	}
+	if !netshRuleEnabled(out) {
+		return false
+	}
+	wantIcmp := ""
+	switch name {
+	case pingBlockRuleName, pingBlockRuleNameV4:
+		wantIcmp = "8"
+	case pingBlockRuleNameV6:
+		wantIcmp = "128"
+	}
+	if wantIcmp != "" && !netshIcmpTypeMatches(out, wantIcmp) {
+		return false
+	}
+	return true
 }
 
 func ruleName(port uint32) string {
@@ -479,16 +539,30 @@ Write-Output ("ENABLED=" + $r.Enabled + ";PORT=" + $p.LocalPort + ";ACTION=" + $
 	if err != nil {
 		return false
 	}
-	return strings.Contains(out, "PORT="+portStr) &&
+	return portTokenExact(out, "PORT=", portStr) &&
 		(strings.Contains(out, "ENABLED=True") || strings.Contains(out, "ENABLED=true")) &&
 		(strings.Contains(out, "ACTION=Allow") || strings.Contains(out, "ACTION=2") || strings.Contains(strings.ToLower(out), "allow"))
 }
 
+func portTokenExact(line, prefix, portStr string) bool {
+	idx := strings.Index(line, prefix+portStr)
+	if idx < 0 {
+		return false
+	}
+	end := idx + len(prefix) + len(portStr)
+	if end < len(line) {
+		c := line[end]
+		if c >= '0' && c <= '9' {
+			return false
+		}
+	}
+	return true
+}
+
 // ListAllowRules lists WinToolbox-Allow-* inbound rules.
 func ListAllowRules() []RuleInfo {
-	out, err := syscmd.RunPS(`
-Get-NetFirewallRule -ErrorAction SilentlyContinue |
-  Where-Object { $_.DisplayName -like 'WinToolbox-Allow-*' -or $_.Name -like 'WinToolbox-Allow-*' } |
+	out, err := syscmd.RunPSQuick(`
+Get-NetFirewallRule -Name 'WinToolbox-Allow-*' -ErrorAction SilentlyContinue |
   ForEach-Object {
     $p = $_ | Get-NetFirewallPortFilter
     $en = '0'
@@ -666,13 +740,14 @@ func netshRulePortMatches(out, portStr string) bool {
 			return true
 		}
 	}
-	return strings.Contains(out, portStr)
+	// Do not fall back to whole-output Contains (PORT=8080 would match "80").
+	return false
 }
 
 func portInNetshValue(line, portStr string) bool {
 	want, err := strconv.ParseUint(portStr, 10, 32)
 	if err != nil {
-		return strings.Contains(line, portStr)
+		return false
 	}
 	if idx := strings.Index(line, ":"); idx >= 0 {
 		val := strings.TrimSpace(line[idx+1:])
@@ -694,7 +769,7 @@ func portInNetshValue(line, portStr string) bool {
 			}
 		}
 	}
-	return strings.Contains(line, portStr)
+	return false
 }
 
 func netshRuleEnabled(out string) bool {
@@ -707,5 +782,50 @@ func netshRuleEnabled(out string) bool {
 			return strings.Contains(lower, "yes") || strings.Contains(lower, "true")
 		}
 	}
-	return true
+	// Missing enabled line: do not treat as active.
+	return false
+}
+
+func netshIcmpTypeMatches(out, wantType string) bool {
+	wantType = strings.TrimSpace(wantType)
+	if wantType == "" {
+		return true
+	}
+	for _, line := range strings.Split(out, "\n") {
+		trim := strings.TrimSpace(line)
+		lower := strings.ToLower(trim)
+		if !(strings.Contains(lower, "icmp") || strings.Contains(trim, "协议") || strings.Contains(lower, "protocol")) {
+			continue
+		}
+		// Examples: "Protocol: ICMPv4:8,any" / "协议: ICMPv4:8,任意"
+		idx := strings.LastIndex(trim, ":")
+		if idx < 0 {
+			continue
+		}
+		rest := strings.TrimSpace(trim[idx+1:])
+		for _, part := range strings.Split(rest, ",") {
+			part = strings.TrimSpace(part)
+			if part == wantType || strings.EqualFold(part, "any") || part == "任意" {
+				return true
+			}
+			// "ICMPv4:8" style token inside value.
+			if j := strings.LastIndex(part, ":"); j >= 0 {
+				if strings.TrimSpace(part[j+1:]) == wantType {
+					return true
+				}
+			}
+		}
+		if strings.Contains(rest, wantType) {
+			// Prefer exact token match already handled; keep soft match for localized dumps.
+			fields := strings.FieldsFunc(rest, func(r rune) bool {
+				return r == ',' || r == ' ' || r == ';'
+			})
+			for _, f := range fields {
+				if f == wantType {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }

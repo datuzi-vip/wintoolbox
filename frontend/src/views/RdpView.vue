@@ -10,7 +10,7 @@ const props = defineProps({
   historyLoading: { type: Boolean, default: false },
 })
 
-defineEmits(['save-port', 'toggle', 'clear-history', 'clear-history-kind', 'delete-history', 'refresh-history'])
+defineEmits(['save-port', 'toggle', 'set-nla', 'clear-history', 'clear-history-kind', 'delete-history', 'refresh-history'])
 
 const kindLabel = {
   mru: '最近主机',
@@ -75,7 +75,7 @@ const selectedKindCount = computed(() => {
 <template>
   <div>
     <h2 class="page-title">远程桌面</h2>
-    <p class="page-desc">开关与端口（更改端口会同步防火墙规则）；可查看并清理本机 mstsc 连接记录</p>
+    <p class="page-desc">开关、端口与 NLA（更改端口会同步防火墙规则）；可查看并清理本机 mstsc 连接记录</p>
 
     <el-alert
       v-if="status && status.rdpAvailable === false"
@@ -97,6 +97,21 @@ const selectedKindCount = computed(() => {
             <span class="wt-status-sub">端口 {{ status?.rdpPort || '—' }}</span>
           </template>
           <el-tag v-else type="danger" effect="dark">不可用</el-tag>
+        </div>
+        <div v-if="status?.rdpAvailable !== false" class="wt-status-line" style="margin-top: 8px">
+          <span class="wt-status-label">网络级身份验证</span>
+          <el-tag
+            :type="status?.rdpNLAUnknown ? 'info' : status?.rdpNLA ? 'success' : 'warning'"
+            effect="dark"
+          >
+            {{
+              status?.rdpNLAUnknown
+                ? '状态未知'
+                : status?.rdpNLA
+                  ? '已强制 NLA'
+                  : '未强制 NLA'
+            }}
+          </el-tag>
         </div>
       </div>
 
@@ -126,9 +141,23 @@ const selectedKindCount = computed(() => {
             >
               {{ status?.rdpEnabled ? '关闭' : '开启' }}
             </el-button>
+            <el-button
+              type="success"
+              :disabled="busy || status?.rdpAvailable === false || status?.rdpNLAUnknown || status?.rdpNLA"
+              @click="$emit('set-nla', true)"
+            >
+              强制 NLA
+            </el-button>
+            <el-button
+              :disabled="busy || status?.rdpAvailable === false || status?.rdpNLAUnknown || !status?.rdpNLA"
+              @click="$emit('set-nla', false)"
+            >
+              关闭 NLA
+            </el-button>
           </div>
         </el-form-item>
       </el-form>
+      <p class="wt-hint">强制 NLA 可在完成身份验证前拒绝连接，降低未认证爆破面。极旧客户端可能无法连接。NLA 状态未知时请先刷新。</p>
     </el-card>
 
     <el-card shadow="never" header="连接记录" class="wt-card" v-loading="historyLoading">

@@ -13,6 +13,8 @@ export function useAppState({appendLog}) {
 
     let detailSeq = 0
     let historySeq = 0
+    let statusSeq = 0
+    let rulesSeq = 0
     let lastWarnings = []
 
     const state = reactive({
@@ -21,9 +23,13 @@ export function useAppState({appendLog}) {
         rdpEnabled: false,
         rdpPort: 3389,
         rdpAvailable: true,
+        rdpNLA: false,
+        rdpNLAUnknown: false,
         updateDisabled: false,
+        updateUnknown: false,
         updateDetail: '',
         defenderDisabled: false,
+        defenderUnknown: false,
         defenderDetail: '',
         firewallSummary: '',
         firewallDomain: '',
@@ -35,16 +41,42 @@ export function useAppState({appendLog}) {
         pingIPv4Blocked: false,
         pingIPv6Blocked: false,
         pingState: 'enabled',
+        riskPortsBlocked: false,
+        riskPortsPartial: false,
+        riskPortsUnknown: false,
+        riskPortsDetail: '',
         timeText: '',
         timeZone: '',
+        timeUnknown: false,
         ntpServer: '',
         warnings: [],
         lockoutDisabled: false,
         lockoutUnknown: false,
         lockoutDetail: '',
-        lockoutThreshold: 10,
-        lockoutDuration: 30,
-        lockoutWindow: 30,
+        lockoutThreshold: -1,
+        lockoutDuration: -1,
+        lockoutWindow: -1,
+        guestExists: false,
+        guestEnabled: false,
+        guestUnknown: false,
+        guestDetail: '',
+        autoLogonEnabled: false,
+        autoLogonUnknown: false,
+        autoLogonDetail: '',
+        passwordMinLength: -1,
+        passwordComplexity: false,
+        passwordComplexityUnknown: true,
+        passwordUnknown: true,
+        passwordPolicyDetail: '',
+        smb1Disabled: false,
+        smb1Unknown: false,
+        smb1Detail: '',
+        winrmHardened: false,
+        winrmUnknown: false,
+        winrmDetail: '',
+        anonymousOK: false,
+        anonymousUnknown: false,
+        anonymousDetail: '',
     })
 
     const form = reactive({
@@ -54,19 +86,27 @@ export function useAppState({appendLog}) {
         rdpPort: 3389,
         fwPort: 8080,
         timeZone: '',
-        ntpServer: 'time.windows.com',
+        ntpServer: '',
         powerDelay: 60,
     })
 
     function applyStatus(st) {
+        const prevRdpPort = state.rdpPort
+        const prevTimeZone = state.timeZone
+        const prevNtp = state.ntpServer
+
         state.overview = st.overview
         state.accounts = st.accounts || []
         state.rdpEnabled = !!st.rdpEnabled
         state.rdpPort = st.rdpPort || 0
         state.rdpAvailable = st.rdpAvailable !== false
-        state.updateDisabled = st.updateDisabled
+        state.rdpNLA = !!st.rdpNLA
+        state.rdpNLAUnknown = !!st.rdpNLAUnknown
+        state.updateDisabled = !!st.updateDisabled
+        state.updateUnknown = !!st.updateUnknown
         state.updateDetail = st.updateDetail
         state.defenderDisabled = !!st.defenderDisabled
+        state.defenderUnknown = !!st.defenderUnknown
         state.defenderDetail = st.defenderDetail || ''
         state.firewallSummary = st.firewallSummary
         state.firewallDomain = st.firewallDomain || ''
@@ -78,27 +118,61 @@ export function useAppState({appendLog}) {
         state.pingIPv4Blocked = !!st.pingIPv4Blocked
         state.pingIPv6Blocked = !!st.pingIPv6Blocked
         state.pingState = st.pingState || 'enabled'
+        state.riskPortsBlocked = !!st.riskPortsBlocked
+        state.riskPortsPartial = !!st.riskPortsPartial
+        state.riskPortsUnknown = !!st.riskPortsUnknown
+        state.riskPortsDetail = st.riskPortsDetail || ''
         state.timeText = st.timeText
         state.timeZone = st.timeZone
+        state.timeUnknown = !!st.timeUnknown
         state.ntpServer = st.ntpServer
         state.warnings = st.warnings || []
         state.lockoutDisabled = !!st.lockoutDisabled
         state.lockoutUnknown = !!st.lockoutUnknown
         state.lockoutDetail = st.lockoutDetail || ''
-        state.lockoutThreshold = Number.isFinite(st.lockoutThreshold) ? st.lockoutThreshold : 10
-        state.lockoutDuration = Number.isFinite(st.lockoutDuration) ? st.lockoutDuration : 30
-        state.lockoutWindow = Number.isFinite(st.lockoutWindow) ? st.lockoutWindow : 30
+        state.lockoutThreshold = Number.isFinite(st.lockoutThreshold) ? st.lockoutThreshold : -1
+        state.lockoutDuration = Number.isFinite(st.lockoutDuration) ? st.lockoutDuration : -1
+        state.lockoutWindow = Number.isFinite(st.lockoutWindow) ? st.lockoutWindow : -1
+        state.guestExists = !!st.guestExists
+        state.guestEnabled = !!st.guestEnabled
+        state.guestUnknown = !!st.guestUnknown
+        state.guestDetail = st.guestDetail || ''
+        state.autoLogonEnabled = !!st.autoLogonEnabled
+        state.autoLogonUnknown = !!st.autoLogonUnknown
+        state.autoLogonDetail = st.autoLogonDetail || ''
+        state.passwordMinLength = Number.isFinite(st.passwordMinLength) ? st.passwordMinLength : -1
+        state.passwordComplexity = !!st.passwordComplexity
+        state.passwordComplexityUnknown = !!st.passwordComplexityUnknown
+        state.passwordUnknown = !!st.passwordUnknown
+        state.passwordPolicyDetail = st.passwordPolicyDetail || ''
+        state.smb1Disabled = !!st.smb1Disabled
+        state.smb1Unknown = !!st.smb1Unknown
+        state.smb1Detail = st.smb1Detail || ''
+        state.winrmHardened = !!st.winrmHardened
+        state.winrmUnknown = !!st.winrmUnknown
+        state.winrmDetail = st.winrmDetail || ''
+        state.anonymousOK = !!st.anonymousOK
+        state.anonymousUnknown = !!st.anonymousUnknown
+        state.anonymousDetail = st.anonymousDetail || ''
 
-        // Only sync RDP form from backend when status is available.
-        if (state.rdpAvailable && st.rdpPort) {
+        // Don't overwrite in-progress form edits (compare against previous status).
+        // Empty form fields always accept the first server value.
+        if (state.rdpAvailable && st.rdpPort && (!form.rdpPort || form.rdpPort === prevRdpPort)) {
             form.rdpPort = st.rdpPort
         }
-        if (st.timeZone && st.timeZone !== '-') form.timeZone = st.timeZone
-        if (st.ntpServer && st.ntpServer !== '-') form.ntpServer = st.ntpServer
+        if (st.timeZone && st.timeZone !== '-' && (!form.timeZone || form.timeZone === prevTimeZone)) {
+            form.timeZone = st.timeZone
+        }
+        if (st.ntpServer && st.ntpServer !== '-' && (!form.ntpServer || form.ntpServer === prevNtp)) {
+            form.ntpServer = st.ntpServer
+        }
 
-        if (!form.accUser && state.accounts.length) {
-            const cur = state.accounts.find((a) => a.current)
-            form.accUser = cur?.name || state.accounts[0].name
+        if (state.accounts.length) {
+            const stillThere = state.accounts.some((a) => a.name === form.accUser)
+            if (!form.accUser || !stillThere) {
+                const cur = state.accounts.find((a) => a.current)
+                form.accUser = cur?.name || state.accounts[0].name
+            }
         }
 
         const prev = lastWarnings
@@ -113,8 +187,8 @@ export function useAppState({appendLog}) {
         state.overview = {
             ...state.overview,
             memoryModules: d.memoryModules || state.overview.memoryModules,
-            physicalDisks: d.physicalDisks?.length ? d.physicalDisks : state.overview.physicalDisks,
-            gpus: d.gpus?.length ? d.gpus : state.overview.gpus,
+            physicalDisks: Array.isArray(d.physicalDisks) ? d.physicalDisks : state.overview.physicalDisks,
+            gpus: Array.isArray(d.gpus) ? d.gpus : state.overview.gpus,
             activated: d.activated,
             activationStatus: d.activationStatus || state.overview.activationStatus,
         }
@@ -150,26 +224,34 @@ export function useAppState({appendLog}) {
     }
 
     async function refresh(showLog = false, invalidate = false, queueDetail = false) {
+        const seq = ++statusSeq
         loading.value = true
         try {
             const st = await api.getStatus(invalidate)
+            if (seq !== statusSeq) return
             applyStatus(st)
             if (showLog) appendLog('已刷新')
             if (queueDetail) queueOverviewDetail()
         } catch (e) {
+            if (seq !== statusSeq) return
             const msg = e?.message || String(e)
             appendLog('刷新失败: ' + msg)
             ElMessage.error('刷新失败: ' + msg)
             throw e
         } finally {
-            loading.value = false
+            if (seq === statusSeq) loading.value = false
         }
     }
 
     async function ensureFirewallRules() {
+        const seq = ++rulesSeq
         try {
-            firewallRules.value = await api.getFirewallRules()
+            const list = (await api.getFirewallRules()) || []
+            if (seq !== rulesSeq) return
+            firewallRules.value = list
         } catch (e) {
+            if (seq !== rulesSeq) return
+            firewallRules.value = []
             ElMessage.warning('防火墙规则加载失败: ' + (e?.message || e))
         }
     }
@@ -184,6 +266,7 @@ export function useAppState({appendLog}) {
         } catch (e) {
             if (seq !== historySeq) return
             ElMessage.warning('RDP 连接记录加载失败: ' + (e?.message || e))
+            rdpHistory.value = []
         } finally {
             if (seq === historySeq) rdpHistoryLoading.value = false
         }
@@ -192,8 +275,9 @@ export function useAppState({appendLog}) {
     async function ensureTimeZones() {
         try {
             const zones = await api.getTimeZones()
-            timeZones.value = zones
+            timeZones.value = zones?.length ? zones : []
         } catch (e) {
+            timeZones.value = []
             ElMessage.warning(e?.message || '时区列表加载失败')
         }
     }

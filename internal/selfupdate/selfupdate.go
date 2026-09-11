@@ -11,7 +11,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -67,7 +66,10 @@ var (
 func Check(current string) (Info, error) {
 	mu.Lock()
 	defer mu.Unlock()
+	return checkLocked(current)
+}
 
+func checkLocked(current string) (Info, error) {
 	info := Info{CurrentVersion: normalizeVersion(current)}
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", repoOwner, repoName)
 
@@ -117,10 +119,7 @@ func Check(current string) (Info, error) {
 		info.AssetName = asset.Name
 		info.AssetURL = asset.BrowserDownloadURL
 		info.AssetSize = asset.Size
-		info.AssetSHA256 = digestSHA256(asset.Digest)
-		if info.AssetSHA256 == "" {
-			info.AssetSHA256 = parseSHA256FromNotes(rel.Body)
-		}
+		info.AssetSHA256 = resolveAssetSHA256(rel.Assets, asset, rel.Body)
 	} else if info.HasUpdate {
 		info.Error = "最新版本未找到 Windows amd64 安装包"
 		cached = info
@@ -133,9 +132,6 @@ func Check(current string) (Info, error) {
 			info.Downloaded = true
 			info.DownloadPath = dest
 			info.Verified = verified
-			// If the asset was previously downloaded, it might still have
-			// Zone.Identifier (MOTW). Best-effort unblock to reduce SmartScreen
-			// false positives when the user clicks "Install".
 			_ = syscmd.UnblockFile(dest)
 		}
 	}
@@ -147,12 +143,12 @@ func Check(current string) (Info, error) {
 // Download downloads the latest release asset when an update is available.
 func Download(current string) (Info, error) {
 	mu.Lock()
-	info := cached
-	mu.Unlock()
+	defer mu.Unlock()
 
+	info := cached
 	if info.LatestVersion == "" || info.CurrentVersion == "" {
 		var err error
-		info, err = Check(current)
+		info, err = checkLocked(current)
 		if err != nil {
 			return info, err
 		}
@@ -170,9 +166,7 @@ func Download(current string) (Info, error) {
 		info.DownloadPath = dest
 		info.Verified = verified
 		_ = syscmd.UnblockFile(dest)
-		mu.Lock()
 		cached = info
-		mu.Unlock()
 		return info, nil
 	}
 
@@ -237,15 +231,11 @@ func Download(current string) (Info, error) {
 		_ = os.Remove(tmp)
 		return info, fmt.Errorf("保存更新包失败: %w", err)
 	}
-	// Best-effort: remove Zone.Identifier ADS so Windows/Defender/SmartScreen
-	// is less likely to block executing the downloaded update.
 	_ = syscmd.UnblockFile(dest)
 
 	info.Downloaded = true
 	info.DownloadPath = dest
-	mu.Lock()
 	cached = info
-	mu.Unlock()
 	return info, nil
 }
 
@@ -298,6 +288,18 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
 		return fmt.Errorf("启动更新脚本失败: %w", err)
 	}
 
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case err := <-done:
+		if err != nil {
+			return fmt.Errorf("更新脚本异常退出: %w", err)
+		}
+		// Finished before we exit — still OK if replacement already happened.
+	case <-time.After(800 * time.Millisecond):
+		// Still running: waiting for this process to exit.
+	}
+
 	go func() {
 		time.Sleep(300 * time.Millisecond)
 		os.Exit(0)
@@ -313,22 +315,106 @@ func Cached() Info {
 }
 
 func pickAsset(assets []ghAsset) *ghAsset {
-	_ = runtime.GOOS
-	var fallback *ghAsset
+	var named *ghAsset
+	var archLoose *ghAsset
 	for i := range assets {
 		a := &assets[i]
 		lower := strings.ToLower(a.Name)
 		if !strings.HasSuffix(lower, ".exe") {
 			continue
 		}
-		if strings.Contains(lower, "windows") && strings.Contains(lower, "amd64") {
+		if strings.Contains(lower, "arm64") || strings.Contains(lower, "aarch64") {
+			continue
+		}
+		if strings.Contains(lower, "windows") && (strings.Contains(lower, "amd64") || strings.Contains(lower, "x64")) {
 			return a
 		}
-		if fallback == nil {
-			fallback = a
+		if strings.Contains(lower, "amd64") || strings.Contains(lower, "x64") || strings.Contains(lower, "x86_64") {
+			if archLoose == nil {
+				archLoose = a
+			}
+			continue
+		}
+		// Only accept arch-less names that clearly belong to this product.
+		if strings.HasPrefix(lower, "wintoolbox") &&
+			!strings.Contains(lower, "386") &&
+			!strings.Contains(lower, "i386") &&
+			!strings.Contains(lower, "arm") {
+			if named == nil {
+				named = a
+			}
 		}
 	}
-	return fallback
+	if archLoose != nil {
+		return archLoose
+	}
+	return named
+}
+
+// resolveAssetSHA256 prefers GitHub digest, then release notes, then a sidecar .sha256 / SHA256.txt asset.
+func resolveAssetSHA256(assets []ghAsset, exe *ghAsset, notes string) string {
+	if exe == nil {
+		return ""
+	}
+	if sum := digestSHA256(exe.Digest); sum != "" {
+		return sum
+	}
+	if sum := parseSHA256FromNotes(notes, exe.Name); sum != "" {
+		return sum
+	}
+	wantSidecar := strings.ToLower(exe.Name) + ".sha256"
+	for i := range assets {
+		a := &assets[i]
+		lower := strings.ToLower(a.Name)
+		if lower == wantSidecar || lower == "sha256.txt" {
+			if sum, err := fetchTextSHA256(a.BrowserDownloadURL); err == nil && sum != "" {
+				return sum
+			}
+		}
+	}
+	return ""
+}
+
+func fetchTextSHA256(url string) (string, error) {
+	client := &http.Client{Timeout: 15 * time.Second}
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<10))
+	if err != nil {
+		return "", err
+	}
+	return parseSHA256Text(string(body)), nil
+}
+
+func parseSHA256Text(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	// Formats: "<64hex>", "<64hex> *file", "SHA256: <64hex>"
+	if sum := parseSHA256FromNotes(s, ""); sum != "" {
+		return sum
+	}
+	fields := strings.Fields(s)
+	if len(fields) == 0 {
+		return ""
+	}
+	cand := strings.TrimPrefix(strings.ToLower(fields[0]), "sha256:")
+	if len(cand) == 64 && isHex(cand) {
+		return cand
+	}
+	return ""
 }
 
 func digestSHA256(digest string) string {
@@ -346,7 +432,25 @@ func digestSHA256(digest string) string {
 	return ""
 }
 
-func parseSHA256FromNotes(notes string) string {
+func parseSHA256FromNotes(notes, assetName string) string {
+	if assetName != "" {
+		want := strings.ToLower(filepath.Base(assetName))
+		for _, line := range strings.Split(notes, "\n") {
+			if !strings.Contains(strings.ToLower(line), want) {
+				continue
+			}
+			if m := sha256BodyRe.FindStringSubmatch(line); len(m) >= 2 {
+				return strings.ToLower(m[1])
+			}
+			for _, f := range strings.Fields(line) {
+				cand := strings.TrimPrefix(strings.ToLower(f), "sha256:")
+				cand = strings.Trim(cand, "`\"'")
+				if len(cand) == 64 && isHex(cand) {
+					return cand
+				}
+			}
+		}
+	}
 	m := sha256BodyRe.FindStringSubmatch(notes)
 	if len(m) >= 2 {
 		return strings.ToLower(m[1])

@@ -2,6 +2,7 @@ package elevate
 
 import (
 	"os"
+	"strings"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -55,17 +56,72 @@ func RelaunchAsAdmin() bool {
 	cwd, _ := os.Getwd()
 	cwdPtr, _ := windows.UTF16PtrFromString(cwd)
 
+	var argsPtr *uint16
+	if len(os.Args) > 1 {
+		joined := quoteArgs(os.Args[1:])
+		argsPtr, err = windows.UTF16PtrFromString(joined)
+		if err != nil {
+			return false
+		}
+	}
+
 	const swShowNormal = 1
 	ret, _, _ := procShellExecute.Call(
 		0,
 		uintptr(unsafe.Pointer(verb)),
 		uintptr(unsafe.Pointer(exePtr)),
-		0,
+		uintptr(unsafe.Pointer(argsPtr)),
 		uintptr(unsafe.Pointer(cwdPtr)),
 		swShowNormal,
 	)
 	// ShellExecute returns value > 32 on success.
 	return ret > 32
+}
+
+func quoteArgs(args []string) string {
+	parts := make([]string, 0, len(args))
+	for _, a := range args {
+		parts = append(parts, quoteArg(a))
+	}
+	return strings.Join(parts, " ")
+}
+
+func quoteArg(a string) string {
+	if a == "" {
+		return `""`
+	}
+	if !strings.ContainsAny(a, " \t\"") {
+		return a
+	}
+	var b strings.Builder
+	b.WriteByte('"')
+	nSlash := 0
+	for i := 0; i < len(a); i++ {
+		c := a[i]
+		switch c {
+		case '\\':
+			nSlash++
+		case '"':
+			// Double backslashes before an embedded quote, then escape the quote as "".
+			for j := 0; j < nSlash*2; j++ {
+				b.WriteByte('\\')
+			}
+			nSlash = 0
+			b.WriteString(`""`)
+		default:
+			for j := 0; j < nSlash; j++ {
+				b.WriteByte('\\')
+			}
+			nSlash = 0
+			b.WriteByte(c)
+		}
+	}
+	// Trailing backslashes before the closing quote must be doubled.
+	for j := 0; j < nSlash*2; j++ {
+		b.WriteByte('\\')
+	}
+	b.WriteByte('"')
+	return b.String()
 }
 
 // EnsureAdmin relaunches elevated via UAC, or shows a message and exits.

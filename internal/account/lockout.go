@@ -302,12 +302,17 @@ func firstInt(s string) (int, bool) {
 }
 
 func isNeverValue(s string) bool {
-	lower := strings.ToLower(strings.TrimSpace(s))
-	return lower == "never" ||
-		strings.Contains(lower, "never") ||
-		strings.Contains(s, "无") ||
-		strings.Contains(s, "無") ||
-		strings.Contains(s, "永不")
+	trimmed := strings.TrimSpace(s)
+	lower := strings.ToLower(trimmed)
+	switch lower {
+	case "never", "none", "n/a", "na":
+		return true
+	}
+	switch trimmed {
+	case "无", "無", "永不", "无限制", "無限制", "没有限制", "沒有限制":
+		return true
+	}
+	return strings.HasPrefix(lower, "never") || strings.Contains(trimmed, "永不")
 }
 
 func normalizeMinuteValue(s string) string {
@@ -358,11 +363,8 @@ func DisableLockout() error {
 			continue
 		}
 		if pol.Unknown {
-			unlocked, unlockErr := unlockAllLocked()
-			if unlockErr != nil && unlocked == 0 {
-				return fmt.Errorf("已提交关闭锁定，但无法复查且解锁账户失败: %w", unlockErr)
-			}
-			return nil
+			lastErr = fmt.Errorf("已提交关闭锁定，但无法解析复查结果（系统语言可能不受支持）")
+			continue
 		}
 
 		unlocked, unlockErr := unlockAllLocked()

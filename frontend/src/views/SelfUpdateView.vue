@@ -44,19 +44,19 @@ defineEmits(['check', 'download', 'apply'])
       </div>
 
       <div class="wt-actions">
-        <el-button type="primary" :loading="checking" :disabled="busy" @click="$emit('check')">
+        <el-button type="primary" :loading="checking" :disabled="busy || checking" @click="$emit('check')">
           检查更新
         </el-button>
         <el-button
           type="warning"
-          :disabled="busy || !info?.hasUpdate || (info?.downloaded && info?.verified)"
+          :disabled="busy || checking || !info?.hasUpdate || (info?.downloaded && info?.verified)"
           @click="$emit('download')"
         >
           下载更新
         </el-button>
         <el-button
           type="success"
-          :disabled="busy || !info?.downloaded || !info?.verified"
+          :disabled="busy || checking || !info?.downloaded || !info?.verified"
           @click="$emit('apply')"
         >
           安装并重启

@@ -90,6 +90,33 @@ export function useActions({busy, appendLog, refresh, form, state, ensureFirewal
             }
             return ok
         },
+        onDisableGuest: () =>
+            run(
+                () => api.disableGuestAccount(),
+                '来宾账户已禁用',
+                {
+                    confirm: '确认禁用来宾（Guest）账户？',
+                    confirmType: 'warning',
+                },
+            ),
+        onDisableAutoLogon: () =>
+            run(
+                () => api.disableAutoLogon(),
+                '自动登录已关闭',
+                {
+                    confirm: '确认关闭自动登录？将关闭 AutoAdminLogon 并清除 DefaultPassword。',
+                    confirmType: 'warning',
+                },
+            ),
+        onEnablePasswordPolicy: (minLen) =>
+            run(
+                () => api.enablePasswordPolicy(minLen),
+                '密码策略已更新',
+                {
+                    confirm: `确认应用密码策略？最短长度=${minLen}，并开启密码复杂度。`,
+                    confirmType: 'warning',
+                },
+            ),
         onRdpPort: () => {
             const port = normalizePort(form.rdpPort, 0)
             if (!port) {
@@ -122,6 +149,26 @@ export function useActions({busy, appendLog, refresh, form, state, ensureFirewal
             } catch {
                 appendLog('远程桌面切换后：状态刷新失败')
             }
+        },
+        onRdpNLA: (enabled) => {
+            if (!state.rdpAvailable) {
+                ElMessage.warning('远程桌面状态不可用，无法操作')
+                return
+            }
+            if (state.rdpNLAUnknown) {
+                ElMessage.warning('NLA 状态未知，请先刷新后再操作')
+                return
+            }
+            return run(
+                () => api.setRdpNLA(enabled),
+                enabled ? '已强制网络级身份验证（NLA）' : '已关闭 NLA',
+                {
+                    confirm: enabled
+                        ? '确认强制网络级身份验证（NLA）？旧版客户端可能无法连接。'
+                        : '确认关闭 NLA？未认证连接面将增大。',
+                    confirmType: 'warning',
+                },
+            )
         },
         onRdpClearHistory: () =>
             run(() => api.clearRdpHistory(), '已清理 RDP 连接记录', {
@@ -258,17 +305,74 @@ export function useActions({busy, appendLog, refresh, form, state, ensureFirewal
                 '已恢复 ping',
                 {confirm: '确认恢复本机对 ping 的响应？将删除 WinToolbox 创建的禁 ping 规则。'},
             ),
+        onFwBlockRisk: () =>
+            run(
+                () => api.blockRiskPorts(),
+                '已拦截高危入站端口',
+                {
+                    confirm:
+                        '确认拦切入站 TCP 135 / 139 / 445 / 5985 / 5986？不含 3389。若本机依赖 SMB 共享或 WinRM，请谨慎操作。',
+                    confirmType: 'warning',
+                },
+            ),
+        onFwUnblockRisk: () =>
+            run(
+                () => api.unblockRiskPorts(),
+                '已移除高危端口拦截',
+                {confirm: '确认移除 WinToolbox 创建的高危端口拦截规则？'},
+            ),
+        onDisableSMBv1: () =>
+            run(
+                () => api.disableSMBv1(),
+                'SMBv1 已禁用',
+                {
+                    confirm: '确认禁用 SMBv1？极旧设备将无法通过 SMB1 访问共享，可能需重启后完全生效。',
+                    confirmType: 'warning',
+                },
+            ),
+        onHardenWinRM: () =>
+            run(
+                () => api.hardenWinRM(),
+                'WinRM 已限制',
+                {
+                    confirm:
+                        '确认禁用 WinRM 服务并拦切入站 5985/5986？远程 PowerShell / 部分自动化工具将不可用。',
+                    confirmType: 'warning',
+                },
+            ),
+        onRestrictAnonymous: () =>
+            run(
+                () => api.restrictAnonymous(),
+                '已限制匿名枚举',
+                {
+                    confirm: '确认限制匿名枚举（RestrictAnonymous / RestrictAnonymousSAM）？',
+                    confirmType: 'warning',
+                },
+            ),
         onApplyTZ: () =>
             run(() => api.applyTimeZone(form.timeZone), '时区已更新', {confirm: '确认修改时区？'}),
-        onSaveNTP: () =>
-            run(
-                () => api.saveNTPServer(form.ntpServer),
+        onSaveNTP: () => {
+            const server = String(form.ntpServer || '').trim()
+            if (!server) {
+                ElMessage.warning('NTP 服务器不能为空')
+                return
+            }
+            form.ntpServer = server
+            return run(
+                () => api.saveNTPServer(server),
                 'NTP 已保存',
-                {confirm: `确认保存 NTP 服务器为 ${form.ntpServer}？`},
-            ),
+                {confirm: `确认保存 NTP 服务器为 ${server}？`},
+            )
+        },
         onSyncNTP: () => run(() => api.syncNTP(), '时间已同步', {confirm: '确认立即同步网络时间？'}),
         onTestNTP: async () => {
-            const detail = await run(() => api.testNTPServer(form.ntpServer), null, {skipRefresh: true})
+            const server = String(form.ntpServer || '').trim()
+            if (!server) {
+                ElMessage.warning('NTP 服务器不能为空')
+                return
+            }
+            form.ntpServer = server
+            const detail = await run(() => api.testNTPServer(server), null, {skipRefresh: true})
             if (typeof detail === 'string' && detail) {
                 appendLog('NTP 测试: ' + detail)
                 ElMessage.success('NTP 测试完成')

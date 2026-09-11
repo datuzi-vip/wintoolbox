@@ -11,6 +11,7 @@ import {
   Refresh,
   FirstAidKit,
   Download,
+  Key,
 } from '@element-plus/icons-vue'
 import {APP_VERSION as APP_VERSION_FALLBACK, MENUS} from './constants.js'
 import {api} from './api/index.js'
@@ -22,13 +23,14 @@ const OverviewView = defineAsyncComponent(() => import('./views/OverviewView.vue
 const AccountView = defineAsyncComponent(() => import('./views/AccountView.vue'))
 const RdpView = defineAsyncComponent(() => import('./views/RdpView.vue'))
 const FirewallView = defineAsyncComponent(() => import('./views/FirewallView.vue'))
+const HardenView = defineAsyncComponent(() => import('./views/HardenView.vue'))
 const DefenderView = defineAsyncComponent(() => import('./views/DefenderView.vue'))
 const TimeView = defineAsyncComponent(() => import('./views/TimeView.vue'))
 const PowerView = defineAsyncComponent(() => import('./views/PowerView.vue'))
 const UpdateView = defineAsyncComponent(() => import('./views/UpdateView.vue'))
 const SelfUpdateView = defineAsyncComponent(() => import('./views/SelfUpdateView.vue'))
 
-const ICONS = {Monitor, User, Connection, Lock, Clock, SwitchButton, Refresh, FirstAidKit, Download}
+const ICONS = {Monitor, User, Connection, Lock, Clock, SwitchButton, Refresh, FirstAidKit, Download, Key}
 
 const active = ref('overview')
 const busy = ref(false)
@@ -99,9 +101,13 @@ const status = computed(() => ({
   rdpEnabled: state.rdpEnabled,
   rdpPort: state.rdpPort,
   rdpAvailable: state.rdpAvailable,
+  rdpNLA: state.rdpNLA,
+  rdpNLAUnknown: state.rdpNLAUnknown,
   updateDisabled: state.updateDisabled,
+  updateUnknown: state.updateUnknown,
   updateDetail: state.updateDetail,
   defenderDisabled: state.defenderDisabled,
+  defenderUnknown: state.defenderUnknown,
   defenderDetail: state.defenderDetail,
   firewallSummary: state.firewallSummary,
   firewallDomain: state.firewallDomain,
@@ -113,7 +119,21 @@ const status = computed(() => ({
   pingIPv4Blocked: state.pingIPv4Blocked,
   pingIPv6Blocked: state.pingIPv6Blocked,
   pingState: state.pingState,
+  riskPortsBlocked: state.riskPortsBlocked,
+  riskPortsPartial: state.riskPortsPartial,
+  riskPortsUnknown: state.riskPortsUnknown,
+  riskPortsDetail: state.riskPortsDetail,
   timeText: state.timeText,
+  timeUnknown: state.timeUnknown,
+  smb1Disabled: state.smb1Disabled,
+  smb1Unknown: state.smb1Unknown,
+  smb1Detail: state.smb1Detail,
+  winrmHardened: state.winrmHardened,
+  winrmUnknown: state.winrmUnknown,
+  winrmDetail: state.winrmDetail,
+  anonymousOK: state.anonymousOK,
+  anonymousUnknown: state.anonymousUnknown,
+  anonymousDetail: state.anonymousDetail,
 }))
 
 const activeMenu = computed(() => MENUS.find((m) => m.key === active.value))
@@ -130,6 +150,7 @@ watch(active, (key) => {
 const APP_VERSION = ref(APP_VERSION_FALLBACK)
 
 async function onCheckAppUpdate(showToast = true) {
+  if (appUpdateChecking.value || busy.value) return
   appUpdateChecking.value = true
   try {
     const info = await api.checkAppUpdate()
@@ -159,6 +180,7 @@ async function onCheckAppUpdate(showToast = true) {
 }
 
 async function onDownloadAppUpdate() {
+  if (busy.value || appUpdateChecking.value) return
   busy.value = true
   try {
     const info = await api.downloadAppUpdate()
@@ -175,6 +197,8 @@ async function onDownloadAppUpdate() {
 }
 
 async function onApplyAppUpdate() {
+  if (busy.value || appUpdateChecking.value) return
+  busy.value = true
   try {
     await ElMessageBox.confirm(
         `确认安装 v${appUpdate.latestVersion || ''} 并重启 WinToolbox？`,
@@ -182,9 +206,9 @@ async function onApplyAppUpdate() {
         {type: 'warning', confirmButtonText: '安装并重启', cancelButtonText: '取消'},
     )
   } catch {
+    busy.value = false
     return
   }
-  busy.value = true
   try {
     await api.applyAppUpdate()
     appendLog('正在安装更新并重启…')
@@ -198,6 +222,8 @@ async function onApplyAppUpdate() {
 }
 
 async function backgroundAppUpdate() {
+  if (appUpdateChecking.value || busy.value) return
+  appUpdateChecking.value = true
   try {
     const info = await api.checkAppUpdate()
     applyAppUpdateInfo(info)
@@ -210,6 +236,8 @@ async function backgroundAppUpdate() {
     }
   } catch (e) {
     appendLog('后台检查更新失败: ' + (e?.message || e))
+  } finally {
+    appUpdateChecking.value = false
   }
 }
 
@@ -306,12 +334,27 @@ async function onRefresh() {
               :lockout-threshold="state.lockoutThreshold"
               :lockout-duration="state.lockoutDuration"
               :lockout-window="state.lockoutWindow"
+              :guest-exists="state.guestExists"
+              :guest-enabled="state.guestEnabled"
+              :guest-unknown="state.guestUnknown"
+              :guest-detail="state.guestDetail"
+              :auto-logon-enabled="state.autoLogonEnabled"
+              :auto-logon-unknown="state.autoLogonUnknown"
+              :auto-logon-detail="state.autoLogonDetail"
+              :password-min-length="state.passwordMinLength"
+              :password-complexity="state.passwordComplexity"
+              :password-complexity-unknown="state.passwordComplexityUnknown"
+              :password-unknown="state.passwordUnknown"
+              :password-policy-detail="state.passwordPolicyDetail"
               @change-pass="actions.onAccPass"
               @set-enabled="actions.onAccEnabled"
               @set-admin="actions.onAccAdmin"
               @disable-lockout="actions.onDisableLockout"
               @enable-lockout="actions.onEnableLockout"
               @set-lockout-policy="actions.onSetLockoutPolicy"
+              @disable-guest="actions.onDisableGuest"
+              @disable-autologon="actions.onDisableAutoLogon"
+              @enable-password-policy="actions.onEnablePasswordPolicy"
           />
           <RdpView
               v-else-if="active === 'rdp'"
@@ -322,6 +365,7 @@ async function onRefresh() {
               :history-loading="rdpHistoryLoading"
               @save-port="actions.onRdpPort"
               @toggle="actions.onRdpToggle"
+              @set-nla="actions.onRdpNLA"
               @clear-history="actions.onRdpClearHistory"
               @clear-history-kind="actions.onRdpClearHistoryByKind"
               @delete-history="actions.onRdpDeleteHistory"
@@ -341,6 +385,16 @@ async function onRefresh() {
               @disable-ping="actions.onFwDisablePing"
               @enable-ping="actions.onFwEnablePing"
               @clear-allow-all="actions.onFwClearAllAllowRules"
+              @block-risk="actions.onFwBlockRisk"
+              @unblock-risk="actions.onFwUnblockRisk"
+          />
+          <HardenView
+              v-else-if="active === 'harden'"
+              :status="status"
+              :busy="busy"
+              @disable-smb1="actions.onDisableSMBv1"
+              @harden-winrm="actions.onHardenWinRM"
+              @restrict-anonymous="actions.onRestrictAnonymous"
           />
           <DefenderView
               v-else-if="active === 'defender'"

@@ -8,9 +8,18 @@ const props = defineProps({
 
 defineEmits(['disable', 'enable'])
 
+const unknown = computed(() => !!props.status?.updateUnknown)
 const disabled = computed(() => !!props.status?.updateDisabled)
-const canDisable = computed(() => !props.busy && !disabled.value)
-const canEnable = computed(() => !props.busy && disabled.value)
+const canDisable = computed(() => !props.busy && !unknown.value && !disabled.value)
+const canEnable = computed(() => !props.busy && !unknown.value && disabled.value)
+const tagType = computed(() => {
+  if (unknown.value) return 'info'
+  return disabled.value ? 'warning' : 'success'
+})
+const tagText = computed(() => {
+  if (unknown.value) return '未知'
+  return disabled.value ? '已关闭' : '运行中'
+})
 </script>
 
 <template>
@@ -22,8 +31,8 @@ const canEnable = computed(() => !props.busy && disabled.value)
       <div class="wt-status-block">
         <div class="wt-status-line">
           <span class="wt-status-label">状态</span>
-          <el-tag :type="disabled ? 'warning' : 'success'" effect="dark">
-            {{ disabled ? '已关闭' : '运行中' }}
+          <el-tag :type="tagType" effect="dark">
+            {{ tagText }}
           </el-tag>
         </div>
         <p class="wt-detail">{{ status?.updateDetail || '—' }}</p>

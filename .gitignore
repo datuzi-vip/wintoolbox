@@ -3,9 +3,12 @@
 *.syso
 *.test
 *.out
+*.sha256
 rsrc.syso
 WinToolbox.exe
 WinToolbox-v*-windows-amd64.exe
+SHA256.txt
+RELEASE_NOTES.generated.md
 
 # Go
 vendor/

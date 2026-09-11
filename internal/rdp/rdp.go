@@ -21,11 +21,13 @@ const (
 
 // Status holds current Remote Desktop settings.
 type Status struct {
-	Enabled bool
-	Port    uint32
+	Enabled    bool
+	Port       uint32
+	NLA        bool
+	NLAUnknown bool
 }
 
-// GetStatus reads whether RDP is enabled and the listening port.
+// GetStatus reads whether RDP is enabled, the listening port, and NLA.
 func GetStatus() (Status, error) {
 	port, err := GetPort()
 	if err != nil {
@@ -35,7 +37,11 @@ func GetStatus() (Status, error) {
 	if err != nil {
 		return Status{}, err
 	}
-	return Status{Enabled: enabled, Port: port}, nil
+	nla, nlaErr := IsNLAEnabled()
+	if nlaErr != nil {
+		return Status{Enabled: enabled, Port: port, NLA: false, NLAUnknown: true}, nil
+	}
+	return Status{Enabled: enabled, Port: port, NLA: nla, NLAUnknown: false}, nil
 }
 
 // GetPort returns the current RDP TCP port.
@@ -131,6 +137,11 @@ func ensureCustomRuleState(p uint32, enabled bool) error {
 		"profile=any",
 	)
 	if err == nil {
+		if enabled {
+			if !firewallAllowsPort(portStr) {
+				return fmt.Errorf("防火墙规则校验失败，未确认端口 %s 已放行", portStr)
+			}
+		}
 		return nil
 	}
 
@@ -150,6 +161,9 @@ func ensureCustomRuleState(p uint32, enabled bool) error {
 			msg = addErr.Error()
 		}
 		return fmt.Errorf("创建防火墙规则失败: %s", msg)
+	}
+	if enabled && !firewallAllowsPort(portStr) {
+		return fmt.Errorf("防火墙规则校验失败，未确认端口 %s 已放行", portStr)
 	}
 	return nil
 }
@@ -349,11 +363,19 @@ Write-Output 'OK'
 		return nil
 	}
 
-	_, _ = syscmd.Run("netsh", "advfirewall", "firewall", "delete", "rule", "name="+fwRuleName)
-	_, _ = syscmd.RunPS(fmt.Sprintf(
-		`Get-NetFirewallRule -Name '%s' -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction SilentlyContinue`,
-		fwRuleName,
-	))
+	// Prefer in-place set; only add when missing. Never delete-first (avoids open window).
+	_, setErr := syscmd.Run("netsh", "advfirewall", "firewall", "set", "rule",
+		"name="+fwRuleName, "new",
+		"enable=yes",
+		"dir=in",
+		"action=allow",
+		"protocol=TCP",
+		"localport="+portStr,
+		"profile=any",
+	)
+	if setErr == nil {
+		return nil
+	}
 	out, err := syscmd.Run("netsh", "advfirewall", "firewall", "add", "rule",
 		"name="+fwRuleName,
 		"dir=in",
@@ -440,7 +462,8 @@ func netshRuleEnabled(out string) bool {
 			return strings.Contains(lower, "yes") || strings.Contains(lower, "true")
 		}
 	}
-	return true
+	// Missing enabled line: do not treat as active.
+	return false
 }
 
 func restartTermService() error {

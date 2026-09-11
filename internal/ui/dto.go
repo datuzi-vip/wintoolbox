@@ -4,13 +4,13 @@ import "wintoolbox/internal/wintime"
 
 const (
 	AppName    = "WinToolbox" // synced from version.json via scripts/sync-version.ps1
-	AppVersion = "v1.1"       // synced from version.json via scripts/sync-version.ps1
+	AppVersion = "v1.2.0"       // synced from version.json via scripts/sync-version.ps1
 )
 
 // AppInfo is version metadata for the UI.
 type AppInfo struct {
 	Name    string `json:"name"`    // WinToolbox
-	Version string `json:"version"` // v1.1
+	Version string `json:"version"` // v1.2.0
 }
 
 // Status is a full app snapshot for UI.
@@ -20,7 +20,10 @@ type Status struct {
 	RdpEnabled       bool                 `json:"rdpEnabled"`
 	RdpPort          uint32               `json:"rdpPort"`
 	RdpAvailable     bool                 `json:"rdpAvailable"`
+	RdpNLA           bool                 `json:"rdpNLA"`
+	RdpNLAUnknown    bool                 `json:"rdpNLAUnknown"`
 	UpdateDisabled   bool                 `json:"updateDisabled"`
+	UpdateUnknown    bool                 `json:"updateUnknown"`
 	UpdateDetail     string               `json:"updateDetail"`
 	FirewallSummary  string               `json:"firewallSummary"`
 	FirewallDomain   string               `json:"firewallDomain"`
@@ -32,10 +35,16 @@ type Status struct {
 	PingIPv4Blocked  bool                 `json:"pingIPv4Blocked"`
 	PingIPv6Blocked  bool                 `json:"pingIPv6Blocked"`
 	PingState        string               `json:"pingState"`
+	RiskPortsBlocked bool                 `json:"riskPortsBlocked"`
+	RiskPortsPartial bool                 `json:"riskPortsPartial"`
+	RiskPortsUnknown bool                 `json:"riskPortsUnknown"`
+	RiskPortsDetail  string               `json:"riskPortsDetail"`
 	DefenderDisabled bool                 `json:"defenderDisabled"`
+	DefenderUnknown  bool                 `json:"defenderUnknown"`
 	DefenderDetail   string               `json:"defenderDetail"`
 	TimeText         string               `json:"timeText"`
 	TimeZone         string               `json:"timeZone"`
+	TimeUnknown      bool                 `json:"timeUnknown"`
 	TimeZones        []wintime.ZoneOption `json:"timeZones"`
 	NTPServer        string               `json:"ntpServer"`
 	Warnings         []string             `json:"warnings,omitempty"`
@@ -45,6 +54,31 @@ type Status struct {
 	LockoutThreshold int                  `json:"lockoutThreshold"`
 	LockoutDuration  int                  `json:"lockoutDuration"`
 	LockoutWindow    int                  `json:"lockoutWindow"`
+
+	GuestExists  bool   `json:"guestExists"`
+	GuestEnabled bool   `json:"guestEnabled"`
+	GuestUnknown bool   `json:"guestUnknown"`
+	GuestDetail  string `json:"guestDetail"`
+
+	AutoLogonEnabled bool   `json:"autoLogonEnabled"`
+	AutoLogonUnknown bool   `json:"autoLogonUnknown"`
+	AutoLogonDetail  string `json:"autoLogonDetail"`
+
+	PasswordMinLength         int    `json:"passwordMinLength"`
+	PasswordComplexity        bool   `json:"passwordComplexity"`
+	PasswordComplexityUnknown bool   `json:"passwordComplexityUnknown"`
+	PasswordUnknown           bool   `json:"passwordUnknown"`
+	PasswordPolicyDetail      string `json:"passwordPolicyDetail"`
+
+	Smb1Disabled     bool   `json:"smb1Disabled"`
+	Smb1Unknown      bool   `json:"smb1Unknown"`
+	Smb1Detail       string `json:"smb1Detail"`
+	WinRMHardened    bool   `json:"winrmHardened"`
+	WinRMUnknown     bool   `json:"winrmUnknown"`
+	WinRMDetail      string `json:"winrmDetail"`
+	AnonymousOK      bool   `json:"anonymousOK"`
+	AnonymousUnknown bool   `json:"anonymousUnknown"`
+	AnonymousDetail  string `json:"anonymousDetail"`
 }
 
 // OverviewView is display-ready overview data.

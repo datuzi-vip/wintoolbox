@@ -1,35 +1,45 @@
 # WinToolbox
 
 Windows 本地运维工具箱：Go + [Wails v2](https://wails.io) + Vue3 + Element Plus。  
-版本：v1.1
+版本：v1.2.0
 
-## v1.1 更新说明
+## 文档
 
-- 优化账户锁定策略：自定义参数默认优先回填当前系统值，缺省时回退到 `10 / 30 / 30`；一键开启锁定默认调整为 `10 / 30 / 30`
-- 优化远程桌面、防火墙、时间同步等页面交互与状态刷新，减少首屏外的无效刷新请求
-- 优化 Windows 兼容性：下载的更新包与 WebView2 安装器会尽力移除 `Mark-of-the-Web`，降低被 SmartScreen / Defender 拦截的概率
-- 优化桌面构建链路：资源嵌入改为 `winres`，提升窗口图标与资源加载稳定性
-- 升级 Go / Wails 相关依赖，并完成 `v1.1` 全量构建验证
+- [文档首页](./docs/README.md)
+- [Windows 系统加固指南](./docs/windows-hardening.md)（图文 + 操作选项标注）
+- [修改远程桌面端口](./docs/change-rdp-port.md)
+- [关闭 / 恢复系统更新](./docs/disable-windows-update.md)
+- [修改本地账户密码](./docs/change-password.md)
+
+## v1.2.0 更新说明
+
+- 新增 **安全加固** 页：一键禁用 SMBv1、关闭并拦截 WinRM、限制匿名枚举
+- 新增账户能力：禁用来宾、关闭自动登录、密码策略；锁定策略支持自定义阈值/时长
+- 远程桌面支持 **强制 NLA**；防火墙新增 **高危端口预设**（135/139/445/5985/5986）
+- 全面加固状态探测与操作校验（写后复查、快照恢复、超时未知态提示）
+- 优化各页状态刷新速度（批量探测、规则列表快速查询、防竞态序号）
+- 新增图文操作文档（加固 / 改 RDP 端口 / 关更新 / 改密码）
 
 ## 功能
 
-| 模块     | 能力                                                                                                  |
-|----------|-------------------------------------------------------------------------------------------------------|
-| 本机概览 | 主机名、系统+Build、激活、分辨率、IP、固定磁盘；硬件（厂商/型号/主板/BIOS/CPU/内存/内存条/硬盘/显卡） |
-| 本地账户 | 改密码、启用/禁用、管理员权限；一键开启/关闭账户锁定                                                  |
-| 远程桌面 | 开关、改端口并同步防火墙；查看/单条或全部清理 mstsc 连接记录                                          |
-| 防火墙   | 一键开/关全部配置文件；一键禁 ping / 恢复 ping；放行/删除 TCP 端口，查看已创建规则                    |
-| 防病毒   | 一键关闭/恢复 Windows Defender 实时防护                                                               |
-| 时间同步 | 国际格式时区列表、常用 NTP 预设、立即同步                                                             |
-| 电源     | 锁定、延时重启/关机（含 0 秒立即执行）、取消关机/重启                                                 |
-| 系统更新 | 一键关闭/恢复 Windows Update；状态含策略与核心服务明细                                                |
-| 软件更新 | 检测 GitHub Release，SHA256 校验后下载，确认后安装并重启                                              |
+| 模块     | 能力 |
+|----------|------|
+| 本机概览 | 主机名、系统+Build、激活、分辨率、IP、磁盘与硬件信息 |
+| 本地账户 | 改密码、启用/禁用、管理员；来宾/自动登录；锁定与密码策略 |
+| 远程桌面 | 开关、改端口并同步防火墙、强制 NLA；清理 mstsc 连接记录 |
+| 防火墙   | 一键开/关配置文件；禁 ping；高危端口预设；TCP 放行规则 |
+| 安全加固 | SMBv1、WinRM、匿名枚举一键加固 |
+| 防病毒   | 关闭/恢复 Defender 实时防护（含策略回退与复查） |
+| 时间同步 | 时区、NTP 预设、立即同步、测试 NTP |
+| 电源     | 锁定、延时重启/关机、取消计划 |
+| 系统更新 | 关闭/恢复 Windows Update（快照恢复） |
+| 软件更新 | GitHub Release 检测、SHA256 校验下载与安装 |
 
 ## 支持系统
 
 Windows 10 / 11，Windows Server 2016 / 2019 / 2022 / 2025
 
-需管理员权限。界面基于 WebView2；若未安装会自动联网下载并显示安装进度（防重复下载）。
+需管理员权限。界面基于 WebView2；若未安装会自动联网下载并显示安装进度。
 
 ## 架构
 
@@ -47,6 +57,7 @@ flowchart TB
     Acc[account]
     Rdp[rdp]
     Fw[firewall]
+    Hard[harden]
     Def[defender]
     Time[wintime]
     Pwr[power]
@@ -58,63 +69,19 @@ flowchart TB
     Win[internal/win]
   end
   Vue --> Api --> Wails --> Bind
-  Bind --> Acc & Rdp & Fw & Def & Time & Pwr & Sys & Wu & Su
-  Acc & Rdp & Fw & Def & Time & Pwr & Sys & Wu & Su --> Win
+  Bind --> Acc & Rdp & Fw & Hard & Def & Time & Pwr & Sys & Wu & Su
+  Acc & Rdp & Fw & Hard & Def & Time & Pwr & Sys & Wu & Su --> Win
 ```
-
-- **界面层**：页面只负责展示与确认；通过 `api` 调 Go。
-- **桥接层**：`internal/ui` 聚合状态、校验参数、对外暴露 Wails 方法。
-- **领域层**：各业务包互不依赖 UI；`update` = Windows Update，`selfupdate` = 本软件更新。
-- **平台层**：`internal/win` 提供提权、隐藏执行、对话框、端口校验、WebView2 等。
 
 ## 项目结构
 
 ```
 wintoolbox/
-├── version.json            # 版本单一来源（build 时同步到 Go/前端/wails）
-├── main.go                 # 入口：提权 → WebView2 → 启动 Wails
-├── wails.json              # Wails / 产品元数据
-├── app.manifest            # requireAdministrator
-├── go.mod / go.sum
-├── assets/
-│   └── app.ico
-├── scripts/
-│   ├── build.ps1           # 同步版本 + 前端 + rsrc + go build
-│   ├── sync-version.ps1    # 从 version.json 同步版本号
-│   └── gen-rsrc-winres.go  # 嵌入 manifest + 图标
-├── frontend/               # Vue3 + Element Plus + Vite
-│   ├── public/
-│   ├── src/
-│   │   ├── api/            # 对 window.go.ui.App 的封装
-│   │   ├── composables/    # 状态 / 操作 / runner
-│   │   ├── components/     # OpLog 等
-│   │   ├── views/          # 各功能页（与侧栏一一对应）
-│   │   ├── App.vue         # 壳：导航、刷新、软件更新后台检查
-│   │   ├── constants.js    # 菜单 / NTP 预设（版本由 sync-version 写入）
-│   │   └── styles.css
-│   └── package.json
-├── internal/
-│   ├── ui/                 # Wails 绑定、DTO、LoadStatus、窗口
-│   │   ├── bind.go         # 对外 API
-│   │   ├── dto.go          # 版本常量与结构体（版本由 sync-version 写入）
-│   │   ├── status.go       # 状态聚合
-│   │   ├── wails.go        # 窗口启动
-│   │   └── util.go
-│   ├── win/                # Windows 平台能力
-│   │   ├── elevate/        # 管理员检测 / 提权
-│   │   ├── syscmd/         # 隐藏执行 cmd / PowerShell
-│   │   ├── dialog/         # MessageBox
-│   │   ├── port/           # TCP 端口校验
-│   │   └── webview2rt/     # WebView2 检测与安装
-│   ├── account/            # 本地账户 + 锁定策略
-│   ├── rdp/                # 远程桌面 + 连接历史
-│   ├── firewall/           # 配置文件开关 + 端口规则
-│   ├── defender/           # Defender 实时防护
-│   ├── wintime/            # 时区 / NTP
-│   ├── power/              # 锁定 / 重启 / 关机
-│   ├── sysinfo/            # 本机概览
-│   ├── update/             # Windows Update 开关
-│   └── selfupdate/         # GitHub Release 自更新（SHA256）
+├── version.json
+├── docs/                   # 操作文档与标注配图
+├── scripts/build.ps1
+├── frontend/src/views/     # 与侧栏一一对应
+└── internal/               # account/rdp/firewall/harden/...
 ```
 
 ### 前端 views 对照
@@ -125,17 +92,12 @@ wintoolbox/
 | 本地账户 | AccountView    | account    |
 | 远程桌面 | RdpView        | rdp        |
 | 防火墙   | FirewallView   | firewall   |
+| 安全加固 | HardenView     | harden     |
 | 防病毒   | DefenderView   | defender   |
 | 时间同步 | TimeView       | wintime    |
 | 电源     | PowerView      | power      |
 | 系统更新 | UpdateView     | update     |
 | 软件更新 | SelfUpdateView | selfupdate |
-
-### 交互约定
-
-- 危险操作：Element Plus 确认框
-- 成功：活动日志；失败：Message
-- 首屏：`GetStatus` 快速返回；激活/硬盘/内存条/显卡由 `GetOverviewDetail` 后台补齐
 
 ## 构建
 
@@ -151,15 +113,22 @@ wintoolbox/
 wails dev
 ```
 
-手动 `go build` 时必须带标签：
-
-```powershell
-go build -tags "desktop,production" -ldflags "-s -w -H windowsgui" -o WinToolbox.exe .
-```
-
 ## 运行
 
 双击 `WinToolbox.exe` 按 UAC 提权，或以管理员身份运行。
+
+## 下载与 SmartScreen
+
+从 GitHub Release 下载的安装包**当前未做 Authenticode 代码签名**。Windows 可能提示 SmartScreen 拦截——多为未签名 + 新文件无下载信誉，不代表文件一定有害。
+
+若确认来自本仓库 [Releases](https://github.com/datuzi-vip/wintoolbox/releases)：
+
+1. **更多信息** → **仍要运行**
+2. 用 Release / `*.sha256` 中的哈希校验后再运行
+
+```powershell
+Get-FileHash .\WinToolbox-v1.2.0.exe -Algorithm SHA256
+```
 
 ## 技术栈
 

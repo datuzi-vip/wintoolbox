@@ -17,6 +17,8 @@ defineEmits([
   'disable-ping',
   'enable-ping',
   'clear-allow-all',
+  'block-risk',
+  'unblock-risk',
 ])
 
 const profiles = computed(() => [
@@ -73,12 +75,34 @@ const canEnableAll = computed(
 const canDisableAll = computed(
     () => !props.busy && !props.status?.firewallAllOff && overall.value.text !== '状态未知',
 )
+
+const riskInfo = computed(() => {
+  if (props.status?.riskPortsUnknown) {
+    return { text: '状态未知', type: 'info' }
+  }
+  if (props.status?.riskPortsBlocked) {
+    return { text: '已全部拦截', type: 'success' }
+  }
+  if (props.status?.riskPortsPartial) {
+    return { text: '部分拦截', type: 'warning' }
+  }
+  return { text: '未启用', type: 'info' }
+})
+const canBlockRisk = computed(
+  () => !props.busy && !props.status?.riskPortsUnknown && !props.status?.riskPortsBlocked,
+)
+const canUnblockRisk = computed(
+  () =>
+    !props.busy &&
+    !props.status?.riskPortsUnknown &&
+    (props.status?.riskPortsBlocked || props.status?.riskPortsPartial),
+)
 </script>
 
 <template>
   <div>
     <h2 class="page-title">防火墙</h2>
-    <p class="page-desc">一键开关配置文件、禁用或恢复 ping，并为入站 TCP 添加放行规则（规则名前缀 WinToolbox）</p>
+    <p class="page-desc">一键开关配置文件、禁用或恢复 ping、高危端口预设，并为入站 TCP 添加放行规则（规则名前缀 WinToolbox）</p>
 
     <el-card shadow="never" header="配置文件" class="wt-card">
       <div class="wt-status-block">
@@ -131,8 +155,10 @@ const canDisableAll = computed(
         <br/>
         {{ pingStateInfo.desc }}
         <br/>
-        IPv4：{{ status?.pingIPv4Blocked ? '已阻止' : '未阻止' }}；IPv6：{{
-          status?.pingIPv6Blocked ? '已阻止' : '未阻止'
+        IPv4：{{
+          pingState === 'unknown' ? '未知' : status?.pingIPv4Blocked ? '已阻止' : '未阻止'
+        }}；IPv6：{{
+          pingState === 'unknown' ? '未知' : status?.pingIPv6Blocked ? '已阻止' : '未阻止'
         }}
       </p>
       <div class="wt-actions wt-actions--mt">
@@ -141,11 +167,35 @@ const canDisableAll = computed(
       </div>
     </el-card>
 
+    <el-card shadow="never" header="高危端口预设" class="wt-card">
+      <div class="wt-status-block">
+        <div class="wt-status-line">
+          <span class="wt-status-label">拦截状态</span>
+          <el-tag :type="riskInfo.type" effect="dark">{{ riskInfo.text }}</el-tag>
+          <span class="wt-status-sub">{{ status?.riskPortsDetail || '—' }}</span>
+        </div>
+      </div>
+      <p class="wt-detail">
+        一键拦切入站 TCP：135（RPC）、139（NetBIOS）、445（SMB）、5985/5986（WinRM）。不含 3389，以免影响远程桌面。
+        <template v-if="status?.riskPortsUnknown">
+          <br/>状态未知时请先点击右上角「刷新」后再操作。
+        </template>
+      </p>
+      <div class="wt-actions wt-actions--mt">
+        <el-button type="warning" :disabled="!canBlockRisk" @click="$emit('block-risk')">
+          拦高危入站端口
+        </el-button>
+        <el-button type="success" :disabled="!canUnblockRisk" @click="$emit('unblock-risk')">
+          移除高危拦截
+        </el-button>
+      </div>
+    </el-card>
+
     <el-card shadow="never" header="已创建规则" class="wt-card">
       <div class="wt-actions wt-actions--mt" style="margin-bottom: 10px">
         <el-button
           type="danger"
-          :disabled="busy"
+          :disabled="busy || !rules.length"
           @click="$emit('clear-allow-all')"
         >
           删除全部放行规则

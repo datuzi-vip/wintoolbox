@@ -8,6 +8,7 @@ import (
 	"wintoolbox/internal/account"
 	"wintoolbox/internal/defender"
 	"wintoolbox/internal/firewall"
+	"wintoolbox/internal/harden"
 	"wintoolbox/internal/power"
 	"wintoolbox/internal/rdp"
 	"wintoolbox/internal/selfupdate"
@@ -95,6 +96,21 @@ func (a *App) SetAccountLockoutPolicy(threshold, durationMin, windowMin int) err
 	return account.SetLockoutPolicy(uint32(threshold), uint32(durationMin), uint32(windowMin))
 }
 
+func (a *App) DisableGuestAccount() error {
+	return account.DisableGuest()
+}
+
+func (a *App) DisableAutoLogon() error {
+	return account.DisableAutoLogon()
+}
+
+func (a *App) EnablePasswordPolicy(minLen int) error {
+	if minLen < 0 || minLen > 128 {
+		return fmt.Errorf("密码最短长度无效（0–128）")
+	}
+	return account.EnablePasswordPolicy(minLen)
+}
+
 func (a *App) ChangeRdpPort(portNum uint32) error {
 	if err := port.ValidTCP(portNum); err != nil {
 		return err
@@ -111,6 +127,10 @@ func (a *App) ToggleRdp() error {
 		return err
 	}
 	return rdp.SetEnabled(!st.Enabled)
+}
+
+func (a *App) SetRdpNLA(enabled bool) error {
+	return rdp.SetNLA(enabled)
 }
 
 func (a *App) ClearRdpHistory() (string, error) {
@@ -157,6 +177,26 @@ func (a *App) DisablePing() error {
 
 func (a *App) EnablePing() error {
 	return firewall.EnablePing()
+}
+
+func (a *App) BlockRiskPorts() error {
+	return firewall.BlockRiskPorts()
+}
+
+func (a *App) UnblockRiskPorts() error {
+	return firewall.UnblockRiskPorts()
+}
+
+func (a *App) DisableSMBv1() error {
+	return harden.DisableSMBv1()
+}
+
+func (a *App) HardenWinRM() error {
+	return harden.HardenWinRM()
+}
+
+func (a *App) RestrictAnonymous() error {
+	return harden.RestrictAnonymous()
 }
 
 func (a *App) ApplyTimeZone(id string) error {

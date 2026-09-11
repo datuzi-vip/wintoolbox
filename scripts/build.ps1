@@ -56,4 +56,30 @@ Assert-LastExitCode 'go build'
 Copy-Item -LiteralPath WinToolbox.exe -Destination $versionedExe -Force
 
 $size = (Get-Item WinToolbox.exe).Length
+$hash = (Get-FileHash -LiteralPath $versionedExe -Algorithm SHA256).Hash.ToLowerInvariant()
+$sha256File = "$versionedExe.sha256"
+# Common checksum format: "<hash> *<filename>"
+Set-Content -LiteralPath $sha256File -Value ("{0} *{1}" -f $hash, $versionedExe) -Encoding ascii -NoNewline
+# Also keep a plain hash-only file for quick copy/paste.
+Set-Content -LiteralPath 'SHA256.txt' -Value $hash -Encoding ascii -NoNewline
+
+$notesPath = 'RELEASE_NOTES.generated.md'
+$templatePath = Join-Path $PSScriptRoot 'release-notes.template.md'
+if (-not (Test-Path -LiteralPath $templatePath)) {
+  throw "Missing $templatePath"
+}
+$notes = [System.IO.File]::ReadAllText($templatePath, [System.Text.UTF8Encoding]::new($false))
+$notes = $notes.Replace('{{VERSION}}', $displayVersion)
+$notes = $notes.Replace('{{EXE}}', $versionedExe)
+$notes = $notes.Replace('{{SHA256}}', $hash)
+$notes = $notes.Replace('{{SHA256_FILE}}', $sha256File)
+[System.IO.File]::WriteAllText(
+  (Join-Path (Get-Location) $notesPath),
+  $notes,
+  [System.Text.UTF8Encoding]::new($false)
+)
+
 Write-Host ("Done: WinToolbox.exe + {0} ({1:N0} bytes / {2:N2} MB)" -f $versionedExe, $size, ($size / 1MB)) -ForegroundColor Green
+Write-Host ("SHA256: {0}" -f $hash) -ForegroundColor Green
+Write-Host ("Wrote: {0}, SHA256.txt, {1}" -f $sha256File, $notesPath) -ForegroundColor DarkGray
+Write-Host 'Publish tip: upload the versioned exe (+ .sha256) and paste RELEASE_NOTES.generated.md as the GitHub Release body.' -ForegroundColor Cyan

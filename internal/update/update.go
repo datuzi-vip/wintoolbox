@@ -2,6 +2,7 @@ package update
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -25,6 +26,15 @@ var defaultStartType = map[string]string{
 	"WaaSMedicSvc": "demand",
 	"uhssvc":       "demand",
 	"DoSvc":        "auto",
+}
+
+var updateTaskNames = []string{
+	`\Microsoft\Windows\WindowsUpdate\Scheduled Start`,
+	`\Microsoft\Windows\WindowsUpdate\sih`,
+	`\Microsoft\Windows\UpdateOrchestrator\Schedule Scan`,
+	`\Microsoft\Windows\UpdateOrchestrator\UpdateModelTask`,
+	`\Microsoft\Windows\UpdateOrchestrator\USO_UxBroker`,
+	`\Microsoft\Windows\UpdateOrchestrator\Backup Scan`,
 }
 
 const (
@@ -95,7 +105,9 @@ func GetStatus() Status {
 // Disable turns off Windows automatic updates via policy, then best-effort service stops.
 // Previous policy/service start values are snapshotted once for Enable() restore.
 func Disable() error {
-	_ = saveUpdateSnapshotIfNeeded()
+	if err := saveUpdateSnapshotIfNeeded(); err != nil {
+		return fmt.Errorf("保存更新快照失败，已中止关闭: %w", err)
+	}
 
 	if err := setUpdatePolicyDisabled(); err != nil {
 		return fmt.Errorf("写入更新策略失败: %w", err)
@@ -118,6 +130,10 @@ func Disable() error {
 	}
 
 	setUpdateTasks(false)
+	st := GetStatus()
+	if !st.Disabled {
+		return fmt.Errorf("已提交关闭更新，但复查仍显示运行中: %s", st.Detail)
+	}
 	return nil
 }
 
@@ -133,33 +149,24 @@ func Enable() error {
 			return fmt.Errorf("清除更新限制策略失败: %w", err)
 		}
 		for _, name := range updateServices {
-			startType := defaultStartType[name]
-			if startType == "" {
-				startType = "demand"
-			}
-			out, err := syscmd.Run("sc", "config", name, "start=", startType)
-			if err != nil {
-				msg := strings.TrimSpace(out)
-				if msg == "" {
-					msg = err.Error()
-				}
-				if serviceMissing(msg) {
-					continue
-				}
-				dword := uint32(3)
-				if startType == "auto" {
-					dword = 2
-				}
-				_ = setServiceStartDWORD(name, dword)
+			if err := applyServiceStart(name, defaultStartType[name]); err != nil {
+				return fmt.Errorf("恢复服务 %s 失败: %w", name, err)
 			}
 		}
+		setUpdateTasks(true)
 	}
 
 	for _, name := range []string{"wuauserv", "UsoSvc", "DoSvc"} {
 		_, _ = syscmd.Run("sc", "start", name)
 	}
 
-	setUpdateTasks(true)
+	st := GetStatus()
+	if st.Disabled {
+		return fmt.Errorf("已提交恢复更新，但复查仍显示已关闭: %s", st.Detail)
+	}
+	if restored {
+		_ = clearBackup()
+	}
 	return nil
 }
 
@@ -172,10 +179,6 @@ func saveUpdateSnapshotIfNeeded() error {
 		return err
 	}
 	defer k.Close()
-
-	if err := k.SetDWordValue("Saved", 1); err != nil {
-		return err
-	}
 
 	noAuto, hasNoAuto := readNoAutoUpdate()
 	if hasNoAuto {
@@ -204,7 +207,23 @@ func saveUpdateSnapshotIfNeeded() error {
 			_ = k.SetDWordValue("HadSvc_"+name, 0)
 		}
 	}
-	return nil
+
+	for i, tn := range updateTaskNames {
+		key := "Task_" + strconv.Itoa(i)
+		en, ok := taskEnabled(tn)
+		if !ok {
+			_ = k.SetDWordValue(key, 2) // unknown / missing
+			continue
+		}
+		if en {
+			_ = k.SetDWordValue(key, 1)
+		} else {
+			_ = k.SetDWordValue(key, 0)
+		}
+	}
+
+	// Mark complete last so a crash mid-write won't look like a valid snapshot.
+	return k.SetDWordValue("Saved", 1)
 }
 
 func backupExists() bool {
@@ -243,8 +262,8 @@ func restoreUpdateSnapshot() (bool, error) {
 	}
 
 	type svcSnap struct {
-		name string
-		had  bool
+		name  string
+		had   bool
 		start uint64
 	}
 	svcs := make([]svcSnap, 0, len(updateServices))
@@ -255,6 +274,11 @@ func restoreUpdateSnapshot() (bool, error) {
 			s.start, _, _ = k.GetIntegerValue("Svc_" + name)
 		}
 		svcs = append(svcs, s)
+	}
+
+	taskStates := make([]uint64, len(updateTaskNames))
+	for i := range updateTaskNames {
+		taskStates[i], _, _ = k.GetIntegerValue("Task_" + strconv.Itoa(i))
 	}
 	k.Close()
 
@@ -281,22 +305,56 @@ func restoreUpdateSnapshot() (bool, error) {
 	}
 
 	for _, s := range svcs {
-		if !s.had {
-			continue
+		start := defaultStartType[s.name]
+		if s.had {
+			start = dwordToScStart(uint32(s.start))
 		}
-		startType := dwordToScStart(uint32(s.start))
-		out, err := syscmd.Run("sc", "config", s.name, "start=", startType)
-		if err != nil {
-			msg := strings.TrimSpace(out)
-			if serviceMissing(msg) || serviceMissing(err.Error()) {
-				continue
-			}
-			_ = setServiceStartDWORD(s.name, uint32(s.start))
+		if err := applyServiceStart(s.name, start); err != nil {
+			return false, fmt.Errorf("恢复服务 %s 失败: %w", s.name, err)
 		}
 	}
 
-	_ = clearBackup()
+	for i, tn := range updateTaskNames {
+		switch taskStates[i] {
+		case 0:
+			_, _ = syscmd.Run("schtasks", "/Change", "/TN", tn, "/Disable")
+		case 1:
+			_, _ = syscmd.Run("schtasks", "/Change", "/TN", tn, "/Enable")
+		default:
+			// Unknown at snapshot: prefer enabling so updates can run again.
+			_, _ = syscmd.Run("schtasks", "/Change", "/TN", tn, "/Enable")
+		}
+	}
+
+	// Caller clears backup only after services are started.
 	return true, nil
+}
+
+func applyServiceStart(name, startType string) error {
+	if startType == "" {
+		startType = "demand"
+	}
+	out, err := syscmd.Run("sc", "config", name, "start=", startType)
+	if err != nil {
+		msg := strings.TrimSpace(out)
+		if msg == "" {
+			msg = err.Error()
+		}
+		if serviceMissing(msg) {
+			return nil
+		}
+		dword := uint32(3)
+		switch startType {
+		case "auto":
+			dword = 2
+		case "disabled":
+			dword = 4
+		}
+		if err2 := setServiceStartDWORD(name, dword); err2 != nil {
+			return fmt.Errorf("%s; 注册表回退: %v", msg, err2)
+		}
+	}
+	return nil
 }
 
 func clearBackup() error {
@@ -424,17 +482,32 @@ func setUpdateTasks(enable bool) {
 	if enable {
 		flag = "/Enable"
 	}
-	tasks := []string{
-		`\Microsoft\Windows\WindowsUpdate\Scheduled Start`,
-		`\Microsoft\Windows\WindowsUpdate\sih`,
-		`\Microsoft\Windows\UpdateOrchestrator\Schedule Scan`,
-		`\Microsoft\Windows\UpdateOrchestrator\UpdateModelTask`,
-		`\Microsoft\Windows\UpdateOrchestrator\USO_UxBroker`,
-		`\Microsoft\Windows\UpdateOrchestrator\Backup Scan`,
-	}
-	for _, task := range tasks {
+	for _, task := range updateTaskNames {
 		_, _ = syscmd.Run("schtasks", "/Change", "/TN", task, flag)
 	}
+}
+
+func taskEnabled(tn string) (enabled bool, ok bool) {
+	out, err := syscmd.RunQuick("schtasks", "/Query", "/TN", tn, "/FO", "LIST", "/V")
+	if err != nil {
+		return false, false
+	}
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		lower := strings.ToLower(line)
+		isStatus := strings.HasPrefix(lower, "status:") ||
+			strings.HasPrefix(line, "状态:") ||
+			strings.HasPrefix(line, "狀態:") ||
+			strings.Contains(lower, "scheduled task state")
+		if !isStatus && !(strings.Contains(line, "状态") || strings.Contains(line, "狀態")) {
+			continue
+		}
+		if strings.Contains(lower, "disabled") || strings.Contains(line, "已禁用") || strings.Contains(line, "已停用") {
+			return false, true
+		}
+		return true, true
+	}
+	return false, false
 }
 
 func serviceMissing(msg string) bool {
@@ -466,7 +539,7 @@ func readNoAutoUpdate() (value bool, ok bool) {
 }
 
 func serviceStartType(name string) string {
-	out, err := syscmd.Run("sc", "qc", name)
+	out, err := syscmd.RunQuick("sc", "qc", name)
 	msg := strings.TrimSpace(out)
 	if err != nil {
 		if serviceMissing(msg) || serviceMissing(err.Error()) {

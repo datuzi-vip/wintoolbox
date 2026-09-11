@@ -17,6 +17,7 @@ const (
 // Status describes Windows Defender realtime protection.
 type Status struct {
 	Disabled bool
+	Unknown  bool
 	Detail   string
 }
 
@@ -35,14 +36,17 @@ func GetStatus() Status {
 		parts = append(parts, fmt.Sprintf("策略禁用=%v", policyOff))
 	}
 
+	unknown := !hasPref && !hasPolicy
 	disabled := (hasPref && rtOff) || (hasPolicy && policyOff)
 	detail := strings.Join(parts, " · ")
-	return Status{Disabled: disabled, Detail: detail}
+	return Status{Disabled: disabled, Unknown: unknown, Detail: detail}
 }
 
-// Disable turns off Defender realtime protection (best-effort).
+// Disable turns off Defender realtime protection.
 func Disable() error {
-	_ = saveSnapshotIfNeeded()
+	if err := saveSnapshotIfNeeded(); err != nil {
+		return fmt.Errorf("保存防病毒快照失败，已中止关闭: %w", err)
+	}
 
 	out, err := syscmd.RunPS(`
 $ErrorActionPreference='Stop'
@@ -62,27 +66,37 @@ try {
 		if looksLikeTamper(msg) {
 			return fmt.Errorf("关闭实时防护失败（可能已开启篡改防护）。请先在 Windows 安全中心关闭「篡改防护」后重试:\n%s", msg)
 		}
-		// Fallback: policy registry
 		if perr := setPolicyDisabled(true); perr != nil {
 			return fmt.Errorf("关闭实时防护失败: %s; 策略回退: %v", msg, perr)
+		}
+		if rtOff, ok := readRealtimeDisabled(); ok && rtOff {
+			// Policy fallback worked — treat as success.
+			return nil
 		}
 		if rtOff, ok := readRealtimeDisabled(); ok && !rtOff {
 			return fmt.Errorf("已写入策略尝试关闭实时防护，但实时防护仍在运行。请关闭「篡改防护」后重试，或在 Windows 安全中心手动关闭。原始错误: %s", msg)
 		}
 		return fmt.Errorf("命令关闭失败，已写入策略作为回退（效果可能需注销/重启后生效）: %s", msg)
 	}
-	_ = setPolicyDisabled(true)
+	if err := setPolicyDisabled(true); err != nil {
+		// Preference succeeded; policy is best-effort.
+		_ = err
+	}
+	if rtOff, ok := readRealtimeDisabled(); ok && !rtOff {
+		return fmt.Errorf("已提交关闭实时防护，但复查仍显示运行中（可能被篡改防护或组策略覆盖）")
+	}
 	return nil
 }
 
-// Enable restores realtime protection from snapshot when possible.
+// Enable turns realtime protection back on (UI "恢复" always means force-on).
 func Enable() error {
-	restored, err := restoreSnapshot()
-	if err != nil {
-		return fmt.Errorf("恢复防病毒快照失败: %w", err)
+	if _, _, err := loadSnapshot(); err != nil {
+		return fmt.Errorf("读取防病毒快照失败: %w", err)
 	}
-	if !restored {
-		_ = setPolicyDisabled(false)
+
+	// Clear WinToolbox disable policy so preference can take effect.
+	if err := setPolicyDisabled(false); err != nil {
+		return fmt.Errorf("清除防病毒禁用策略失败: %w", err)
 	}
 
 	out, err := syscmd.RunPS(`
@@ -105,7 +119,19 @@ try {
 		}
 		return fmt.Errorf("恢复实时防护失败: %s", msg)
 	}
+
+	if rtOff, ok := readRealtimeDisabled(); ok && rtOff {
+		return fmt.Errorf("已提交恢复实时防护，但复查仍显示已关闭")
+	}
+	_ = clearBackup()
 	return nil
+}
+
+type defenderSnap struct {
+	hadPref   bool
+	rtOff     bool
+	hadPolicy bool
+	policyOff bool
 }
 
 func readRealtimeDisabled() (disabled bool, ok bool) {
@@ -170,7 +196,6 @@ func saveSnapshotIfNeeded() error {
 		return err
 	}
 	defer k.Close()
-	_ = k.SetDWordValue("Saved", 1)
 
 	rtOff, hasPref := readRealtimeDisabled()
 	if hasPref {
@@ -195,7 +220,8 @@ func saveSnapshotIfNeeded() error {
 	} else {
 		_ = k.SetDWordValue("HadPolicy", 0)
 	}
-	return nil
+
+	return k.SetDWordValue("Saved", 1)
 }
 
 func backupExists() bool {
@@ -208,34 +234,30 @@ func backupExists() bool {
 	return err == nil && v == 1
 }
 
-func restoreSnapshot() (bool, error) {
+func loadSnapshot() (defenderSnap, bool, error) {
 	k, err := registry.OpenKey(registry.LOCAL_MACHINE, backupKeyPath, registry.QUERY_VALUE)
 	if err != nil {
-		return false, nil
+		return defenderSnap{}, false, nil
 	}
+	defer k.Close()
 	saved, _, err := k.GetIntegerValue("Saved")
 	if err != nil || saved != 1 {
-		k.Close()
-		return false, nil
+		return defenderSnap{}, false, nil
+	}
+	var s defenderSnap
+	hadPref, _, _ := k.GetIntegerValue("HadPref")
+	s.hadPref = hadPref == 1
+	if s.hadPref {
+		v, _, _ := k.GetIntegerValue("DisableRealtimeMonitoring")
+		s.rtOff = v == 1
 	}
 	hadPol, _, _ := k.GetIntegerValue("HadPolicy")
-	var polVal uint64
-	if hadPol == 1 {
-		polVal, _, _ = k.GetIntegerValue("PolicyDisableRealtimeMonitoring")
+	s.hadPolicy = hadPol == 1
+	if s.hadPolicy {
+		v, _, _ := k.GetIntegerValue("PolicyDisableRealtimeMonitoring")
+		s.policyOff = v == 1
 	}
-	k.Close()
-
-	if hadPol == 1 {
-		if polVal == 1 {
-			_ = setPolicyDisabled(true)
-		} else {
-			_ = setPolicyDisabled(false)
-		}
-	} else {
-		_ = setPolicyDisabled(false)
-	}
-	_ = clearBackup()
-	return true, nil
+	return s, true, nil
 }
 
 func clearBackup() error {

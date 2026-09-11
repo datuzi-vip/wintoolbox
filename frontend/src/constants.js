@@ -1,11 +1,12 @@
 export const APP_NAME = 'WinToolbox' // synced from version.json
-export const APP_VERSION = 'v1.1' // synced from version.json
+export const APP_VERSION = 'v1.2.0' // synced from version.json
 
 export const MENUS = [
   { key: 'overview', title: '本机概览', icon: 'Monitor', desc: '系统与硬件' },
   { key: 'account', title: '本地账户', icon: 'User', desc: '密码、权限与锁定策略' },
-  { key: 'rdp', title: '远程桌面', icon: 'Connection', desc: '开关、端口与连接记录' },
-  { key: 'firewall', title: '防火墙', icon: 'Lock', desc: '一键开关与端口放行' },
+  { key: 'rdp', title: '远程桌面', icon: 'Connection', desc: '开关、端口、NLA 与连接记录' },
+  { key: 'firewall', title: '防火墙', icon: 'Lock', desc: '一键开关、禁 ping 与高危端口' },
+  { key: 'harden', title: '安全加固', icon: 'Key', desc: 'SMBv1、WinRM 与匿名限制' },
   { key: 'defender', title: '防病毒', icon: 'FirstAidKit', desc: 'Defender 实时防护' },
   { key: 'time', title: '时间同步', icon: 'Clock', desc: '时区与 NTP' },
   { key: 'power', title: '电源', icon: 'SwitchButton', desc: '锁定 / 重启 / 关机' },

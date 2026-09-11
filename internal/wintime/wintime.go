@@ -212,9 +212,8 @@ func SetTimeZone(id string) error {
 	return nil
 }
 
-// SyncNTP starts W32Time if needed and forces a resync.
+// SyncNTP starts W32Time if needed and forces a resync without changing its start type.
 func SyncNTP() error {
-	_, _ = syscmd.Run("sc", "config", "W32Time", "start=", "auto")
 	_, _ = syscmd.Run("sc", "start", "W32Time")
 	out, err := syscmd.Run("w32tm", "/resync", "/force")
 	if err != nil {
@@ -243,7 +242,13 @@ func SetNTPServer(server string) error {
 		return fmt.Errorf("配置 NTP 失败: %w", err)
 	}
 	_, _ = syscmd.Run("sc", "stop", "W32Time")
-	_, _ = syscmd.Run("sc", "start", "W32Time")
+	if _, err := syscmd.Run("sc", "start", "W32Time"); err != nil {
+		out, _ := syscmd.RunQuick("sc", "query", "W32Time")
+		upper := strings.ToUpper(out)
+		if !strings.Contains(upper, "RUNNING") {
+			return fmt.Errorf("NTP 已写入，但启动 W32Time 失败: %w", err)
+		}
+	}
 	return nil
 }
 
