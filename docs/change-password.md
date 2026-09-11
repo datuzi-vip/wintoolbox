@@ -12,11 +12,11 @@
 
 更多说明见：[下载 WinToolbox](./download.md)
 
-![下载拦截时点保留](./images/00-download-keep.svg)
+![下载拦截时点保留](./images/00-download-keep.png)
 
 ## 配图标注
 
-![修改密码操作标注](./images/06-change-password.svg)
+![修改密码操作标注](./images/06-change-password.png)
 
 | 标注 | 界面选项 | 说明 |
 |------|----------|------|
@@ -27,7 +27,7 @@
 
 账户页其它相关选项见总览图：
 
-![本地账户完整标注](./images/02-account-ops.svg)
+![本地账户完整标注](./images/02-account-ops.png)
 
 | 标注 | 界面选项 | 与改密的关系 |
 |------|----------|--------------|

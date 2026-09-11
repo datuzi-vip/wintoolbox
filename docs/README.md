@@ -11,7 +11,7 @@
 
 浏览器拦截下载时，请点 **保留 / 保持**（Keep）；运行时若出现 SmartScreen，选 **更多信息 → 仍要运行**。
 
-![下载拦截时点保留](./images/00-download-keep.svg)
+![下载拦截时点保留](./images/00-download-keep.png)
 
 | 文档 | 说明 |
 |------|------|

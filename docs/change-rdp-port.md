@@ -12,11 +12,11 @@
 
 更多说明见：[下载 WinToolbox](./download.md)
 
-![下载拦截时点保留](./images/00-download-keep.svg)
+![下载拦截时点保留](./images/00-download-keep.png)
 
 ## 配图标注
 
-![远程桌面改端口操作标注](./images/03-rdp-port.svg)
+![远程桌面改端口操作标注](./images/03-rdp-port.png)
 
 | 标注 | 界面选项 | 说明 |
 |------|----------|------|

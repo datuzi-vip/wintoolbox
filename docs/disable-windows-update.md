@@ -12,11 +12,11 @@
 
 更多说明见：[下载 WinToolbox](./download.md)
 
-![下载拦截时点保留](./images/00-download-keep.svg)
+![下载拦截时点保留](./images/00-download-keep.png)
 
 ## 配图标注
 
-![关闭系统更新操作标注](./images/04-windows-update.svg)
+![关闭系统更新操作标注](./images/04-windows-update.png)
 
 | 标注 | 界面选项 | 说明 |
 |------|----------|------|

@@ -12,7 +12,7 @@
 
 更多说明见：[下载 WinToolbox](./download.md)
 
-![下载拦截时点保留](./images/00-download-keep.svg)
+![下载拦截时点保留](./images/00-download-keep.png)
 
 ## 适用场景
 
@@ -22,7 +22,7 @@
 
 ## 推荐顺序总览
 
-![侧栏加固入口标注](./images/01-hardening-nav.svg)
+![侧栏加固入口标注](./images/01-hardening-nav.png)
 
 | 编号 | 侧栏入口 | 目标 |
 |------|----------|------|
@@ -36,7 +36,7 @@
 
 ## 1. 本地账户
 
-![本地账户操作标注](./images/02-account-ops.svg)
+![本地账户操作标注](./images/02-account-ops.png)
 
 | 标注 | 操作选项 | 作用 |
 |------|----------|------|
@@ -52,7 +52,7 @@
 
 ## 2. 远程桌面
 
-![远程桌面改端口标注](./images/03-rdp-port.svg)
+![远程桌面改端口标注](./images/03-rdp-port.png)
 
 | 标注 | 操作选项 | 作用 |
 |------|----------|------|
@@ -67,7 +67,7 @@
 
 ## 3. 防火墙 + 安全加固
 
-![防火墙与安全加固标注](./images/05-firewall-harden.svg)
+![防火墙与安全加固标注](./images/05-firewall-harden.png)
 
 ### 防火墙
 
@@ -91,7 +91,7 @@
 
 ## 4. 系统更新（可选）
 
-![关闭系统更新标注](./images/04-windows-update.svg)
+![关闭系统更新标注](./images/04-windows-update.png)
 
 | 标注 | 操作选项 | 作用 |
 |------|----------|------|
