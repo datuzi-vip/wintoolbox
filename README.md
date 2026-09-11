@@ -9,8 +9,8 @@ Windows 本地运维工具箱：Go + [Wails v2](https://wails.io) + Vue3 + Eleme
 浏览器拦截时请点 **保留 / 保持**；详见 [下载说明](./docs/download.md)。
 
 - [文档首页](./docs/README.md)
-- [下载 WinToolbox](./docs/download.md)
-- [Windows 系统加固指南](./docs/windows-hardening.md)（图文 + 操作选项标注）
+- [下载说明](./docs/download.md)
+- [系统加固指南](./docs/windows-hardening.md)
 - [修改远程桌面端口](./docs/change-rdp-port.md)
 - [关闭 / 恢复系统更新](./docs/disable-windows-update.md)
 - [修改本地账户密码](./docs/change-password.md)

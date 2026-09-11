@@ -25,6 +25,10 @@ frontend/auto-imports.d.ts
 .cursor/
 *.iml
 
+# Docs tooling
+docs/__pycache__/
+**/__pycache__/
+
 # OS
 Thumbs.db
 Desktop.ini
